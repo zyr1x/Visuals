@@ -35,7 +35,7 @@ dependencies {
     
     implementation(shadow("dev.redstones.mediaplayerinfo:media-player-info:0.1.0"))
     implementation("com.google.code.gson:gson:2.10.1")
-    include(modImplementation("dev.firstdark.discordrpc:discord-rpc:1.0.3"))
+    implementation(shadow("dev.firstdark.discordrpc:discord-rpc:1.0.3"))
     include implementation("meteordevelopment:orbit:0.2.3") 
     compileOnly("org.projectlombok:lombok:1.18.38")
     annotationProcessor("org.projectlombok:lombok:1.18.38")
