@@ -81,8 +81,8 @@ public class DiscordRichPresenceUtil {
     private static void pushPresence() {
         if (rpc == null) return;
         DiscordRichPresence presence = DiscordRichPresence.builder()
-                .details(state != null && !state.isEmpty() ? state : "Самый лучший пвп мод на 1.21.4 fabric")
-                .largeImageText("Самый лучший пвп мод на 1.21.4 fabric")
+                .details(state != null && !state.isEmpty() ? state : "https://t.me/dontvisuals")
+                .largeImageText("https://t.me/dontvisuals")
                 .smallImageText("Playing")
                 .activityType(ActivityType.PLAYING)
                 .button(DiscordRichPresence.RPCButton.of("Скачать", "https://t.me/dontvisuals"))
