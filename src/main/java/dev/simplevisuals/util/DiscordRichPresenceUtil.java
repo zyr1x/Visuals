@@ -8,7 +8,7 @@ import dev.firstdark.rpc.models.User;
 import dev.firstdark.rpc.handlers.RPCEventHandler;
 
 public class DiscordRichPresenceUtil {
-    private static final String DEFAULT_APP_ID = "1278655459695267890";
+    private static final String DEFAULT_APP_ID = "1508938408158957658";
 
     private static volatile boolean running = false;
     private static Thread rpcThread;
@@ -85,7 +85,7 @@ public class DiscordRichPresenceUtil {
                 .largeImageText("Самый лучший пвп мод на 1.21.4 fabric")
                 .smallImageText("Playing")
                 .activityType(ActivityType.PLAYING)
-                .button(DiscordRichPresence.RPCButton.of("Скачать", "https://t.me/SimpleVisuals"))
+                .button(DiscordRichPresence.RPCButton.of("Скачать", "https://t.me/dontvisuals"))
                 .build();
         try { rpc.updatePresence(presence); } catch (Throwable ignored) {}
     }
