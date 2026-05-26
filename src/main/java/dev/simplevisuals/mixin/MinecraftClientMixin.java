@@ -34,7 +34,7 @@ public abstract class MinecraftClientMixin implements Wrapper {
 
     @Inject(method = "getWindowTitle", at = @At("HEAD"), cancellable = true)
     public void updateWindowTitle(CallbackInfoReturnable<String> cir) {
-        cir.setReturnValue("SimpleVisuals 0.4(BETA)");
+        cir.setReturnValue("DontVisuals 1.0 (BETA)");
     }
 
     @Inject(method = "stop", at = @At("HEAD"))

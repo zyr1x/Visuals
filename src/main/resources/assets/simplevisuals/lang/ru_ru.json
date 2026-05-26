@@ -3,7 +3,7 @@
   "simplevisuals.clickgui.hint.settings": "ПКМ по модулю - настройки",
   "simplevisuals.clickgui.hint.hud_move": "Перемещение HUD - чат",
 
-  "simplevisuals.mainmenu.screen_title": "Меню SimpleVisuals",
+  "simplevisuals.mainmenu.screen_title": "Меню DontVisuals",
   "simplevisuals.mainmenu.singleplayer": "Одиночная игра",
   "simplevisuals.mainmenu.multiplayer": "Мультиплеер",
   "simplevisuals.mainmenu.options": "Настройки",
@@ -33,7 +33,7 @@
   "simplevisuals.alt.saveError": "Не удалось сохранить альты",
   "simplevisuals.alt.loadError": "Не удалось загрузить альты",
   "simplevisuals.ui.onlyInWorld": "Эту менюшку можно открыть только в мире",
-  "simplevisuals.mainmenu.title": "SimpleVisuals - Твой путь к победе",
+  "simplevisuals.mainmenu.title": "DontVisuals - Твой путь к победе",
   "simplevisuals.mainmenu.copyright": "Copyright Mojang AB. Не распространять!",
 
   "notify.featureEnabled": "Функция %s включена",

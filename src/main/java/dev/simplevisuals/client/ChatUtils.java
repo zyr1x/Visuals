@@ -16,11 +16,11 @@ public class ChatUtils implements Wrapper {
     public void sendMessage(String message) {
         if (mc == null || mc.player == null) return;
         MutableText text = Text.literal("");
-        for (int i = 0; i < "simplevisuals".length(); i++) {
-            text.append(Text.literal("simplevisuals".charAt(i) + "")
+        for (int i = 0; i < "dontvisuals".length(); i++) {
+            text.append(Text.literal("dontvisuals".charAt(i) + "")
                     .setStyle(Style.EMPTY
                             .withBold(true)
-                            .withColor(TextColor.fromRgb(ColorUtils.gradient(ColorUtils.getGlobalColor(), Color.WHITE, (float) i / "simplevisuals".length()).getRGB()))
+                            .withColor(TextColor.fromRgb(ColorUtils.gradient(ColorUtils.getGlobalColor(), Color.WHITE, (float) i / "dontvisuals".length()).getRGB()))
                     )
             );
         }
