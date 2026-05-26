@@ -40,7 +40,7 @@ public class  simplevisuals implements ModInitializer, Wrapper {
     private ServerManager serverManager;
 
     public static Logger LOGGER = LogManager.getLogger(simplevisuals.class);
-    private final File globalsDir = new File(mc.runDirectory, "simplevisuals");
+    private final File globalsDir = new File(mc.runDirectory, "dontvisuals");
     private final File configsDir = new File(globalsDir, "configs");
 
     @Override

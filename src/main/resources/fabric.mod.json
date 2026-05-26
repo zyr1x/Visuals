@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "simplevisuals",
-  "version": "0.3",
-  "name": "simplevisuals",
+  "version": "0.1",
+  "name": "DontVisuals",
   "description": "The best free visual mod",
-  "authors": ["Sh1ckOnly", "Allans"],
+  "authors": ["Lewis", "DontZleg"],
   "contact": {},
   "license": "MIT",
   "icon": "assets/simplevisuals/logo.png",
