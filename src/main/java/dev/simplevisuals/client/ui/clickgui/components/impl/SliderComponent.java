@@ -2,9 +2,7 @@ package dev.simplevisuals.client.ui.clickgui.components.impl;
 
 import dev.simplevisuals.modules.settings.impl.NumberSetting;
 import dev.simplevisuals.client.ui.clickgui.components.Component;
-// removed unused animation imports
 import dev.simplevisuals.client.util.math.MathUtils;
-import dev.simplevisuals.client.util.ColorUtils;
 import dev.simplevisuals.client.util.renderer.fonts.Fonts;
 import dev.simplevisuals.client.util.renderer.Render2D;
 import net.minecraft.client.gui.DrawContext;
@@ -17,153 +15,107 @@ import dev.simplevisuals.client.managers.ThemeManager;
 public class SliderComponent extends Component {
 
     private final NumberSetting setting;
-    // removed unused animation field
     private boolean drag;
 
-    // Smooth animation state
-    private float animatedPixel = -1f; // smoothed fill/knob x in pixels
-    private float hoverAmount = 0f;    // 0..1 hover/drag highlight
+    private float animatedRatio = -1f;
+    private float hoverAmt      = 0f;
 
     public SliderComponent(NumberSetting setting) {
         super(setting.getName());
-        this.setting = setting;
-        this.addHeight = () -> 3f;
-        this.visible = setting::isVisible;
+        this.setting   = setting;
+        this.addHeight = () -> 4f;
+        this.visible   = setting::isVisible;
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // ранний выход, если скрыт или полностью прозрачный
+    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
         if (!visible.get() || getGlobalAlpha() <= 0.01f) return;
 
-        // Hover и сглаживание
-        boolean hovered = MathUtils.isHovered(x, y, width, height, (float) mouseX, (float) mouseY) || drag;
-        hoverAmount += ((hovered ? 1f : 0f) - hoverAmount) * 0.2f;
+        float ga = Math.max(0f, Math.min(1f, getGlobalAlpha()));
 
-        // Перетаскивание — обновление значения
+        // Hover
+        boolean hov = MathUtils.isHovered(x, y, width, height, (float) mouseX, (float) mouseY) || drag;
+        hoverAmt += ((hov ? 1f : 0f) - hoverAmt) * 0.2f;
+
+        // Перетаскивание
         if (drag) {
-            float value = MathHelper.clamp(
-                    MathUtils.round((mouseX - x - 5f) / (width - 12f) * (setting.getMax() - setting.getMin()) + setting.getMin(), setting.getIncrement()),
-                    setting.getMin(),
-                    setting.getMax()
-            );
-            setting.setValue(value);
+            float v = MathHelper.clamp(
+                    MathUtils.round((mouseX - x - 6f) / (width - 12f)
+                                    * (setting.getMax() - setting.getMin()) + setting.getMin(),
+                            setting.getIncrement()),
+                    setting.getMin(), setting.getMax());
+            setting.setValue(v);
         }
 
-        // Соотношение и целевая позиция ползунка
-        float ratio = (float) ((setting.getValue() - setting.getMin()) / (setting.getMax() - setting.getMin()));
+        float ratio = (float) ((setting.getValue() - setting.getMin())
+                / (setting.getMax() - setting.getMin()));
         ratio = MathHelper.clamp(ratio, 0f, 1f);
-        float barWidth = width - 8f;
-        float targetPixel = barWidth * ratio;
-        if (animatedPixel < 0f) animatedPixel = targetPixel; // первый кадр — без анимации
-        animatedPixel += (targetPixel - animatedPixel) * 0.18f; // сглаживание
+        if (animatedRatio < 0f) animatedRatio = ratio;
+        animatedRatio += (ratio - animatedRatio) * 0.16f;
 
-        // Параметры эффектов
-        float scaleValue = 1f + 0.02f * hoverAmount;
-        float fadeValue = Math.max(0f, Math.min(1f, getGlobalAlpha()));
-
-        // Масштабирование области
-        float centerX = x + width / 2f;
-        float centerY = y + height / 2f;
-        float scaledX = centerX - (width * scaleValue) / 2f;
-        float scaledY = centerY - (height * scaleValue) / 2f;
-        float scaledWidth = width * scaleValue;
-        float scaledHeight = height * scaleValue;
-
-        // Фон с hover эффектом
-        Color baseBg = new Color(40, 40, 40, (int) (100 * fadeValue));
-        Color hoverBg = new Color(50, 50, 50, (int) (120 * fadeValue));
-        Color bg = ColorUtils.fade(baseBg, hoverBg, hoverAmount);
-        Render2D.drawRoundedRect(context.getMatrices(), scaledX, scaledY, scaledWidth, scaledHeight, 4f, bg);
-
-        // Текст
-        int textA = (int) Math.max(0, Math.min(255, 255 * fadeValue));
-        float textOffset = hoverAmount * 1f;
-        Render2D.drawFont(context.getMatrices(), Fonts.BOLD.getFont(7.5f),
-                I18n.translate(setting.getName()),
-                scaledX + 4f + textOffset, scaledY + 3f,
-                new Color(255, 255, 255, textA));
-
-        // Трек
-        Color trackBg = new Color(23, 23, 23, (int) (100 * fadeValue));
-        Render2D.drawRoundedRect(context.getMatrices(), scaledX + 4f, scaledY + 13f,
-                scaledWidth - 8f, 4f, 0.5f, trackBg);
-
-        // Заполнение трека
         Color accent = ThemeManager.getInstance().getCurrentTheme().getAccentColor();
-        int fillA = (int) Math.max(0, Math.min(255, 255 * fadeValue));
-        Color fillColor = new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), fillA);
-        // легкое усиление при hover
-        if (hoverAmount > 0f) {
-            fillColor = ColorUtils.fade(fillColor,
-                    new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int) (Math.min(255, fillA * 1.2f))),
-                    hoverAmount);
-        }
-        float fillWidth = (scaledWidth - 8f) * (animatedPixel / barWidth);
-        Render2D.drawRoundedRect(context.getMatrices(), scaledX + 4f, scaledY + 13f,
-                fillWidth, 4f, 0.5f, fillColor);
+        int   textA  = (int) (255 * ga);
 
-        // Ручка
-        float knobSize = (6f + 2f * hoverAmount) * scaleValue;
-        float knobX = scaledX + 1f + (animatedPixel / barWidth) * (scaledWidth - 8f) - (knobSize - 6f) / 2f;
-        float knobY = scaledY + 12f - (knobSize - 6f) / 2f;
-        int knobA = (int) Math.max(0, Math.min(255, 255 * fadeValue));
-        Color knobColor = new Color(255, 255, 255, knobA);
-        if (hoverAmount > 0f) {
-            knobColor = ColorUtils.fade(knobColor,
-                    new Color(255, 255, 255, (int) Math.min(255, knobA * 1.1f)),
-                    hoverAmount);
-        }
-        Render2D.drawRoundedRect(context.getMatrices(),
-                knobX, knobY,
-                knobSize, knobSize,
-                knobSize / 2f, knobColor);
+        // ── Фон строки ──────────────────────────────────────────────────────
+        Render2D.drawRoundedRect(ctx.getMatrices(), x, y, width, height + 4f, 5f,
+                new Color(255, 255, 255, (int) ((10 + 6 * hoverAmt) * ga)));
 
-        // Контур ручки
-        int outlineA = (int) (120 * fadeValue * hoverAmount);
-        if (outlineA > 0) {
-            Color outlineColor = new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), outlineA);
-            Render2D.drawRoundedRect(context.getMatrices(),
-                    knobX - 0.5f, knobY - 0.5f,
-                    knobSize + 1f, knobSize + 1f,
-                    knobSize / 2f + 0.5f, outlineColor);
+        // ── Название ─────────────────────────────────────────────────────────
+        Color themeText = ThemeManager.getInstance().getCurrentTheme().getTextColor();
+        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7.5f),
+                I18n.translate(setting.getName()),
+                x + 6f, y + 3f,
+                new Color(themeText.getRed(), themeText.getGreen(), themeText.getBlue(),
+                        (int) (themeText.getAlpha() * ga)));
+
+        // ── Значение справа ───────────────────────────────────────────────────
+        String valStr = String.valueOf(setting.getValue());
+        float  valW   = Fonts.BOLD.getWidth(valStr, 7f);
+        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7f), valStr,
+                x + width - valW - 6f, y + 3f,
+                new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), textA));
+
+        // ── Трек ─────────────────────────────────────────────────────────────
+        float trackX = x + 6f;
+        float trackY = y + height - 4f;
+        float trackW = width - 12f;
+        float trackH = 3f;
+
+        Render2D.drawRoundedRect(ctx.getMatrices(), trackX, trackY, trackW, trackH, 1.5f,
+                new Color(50, 50, 65, (int) (160 * ga)));
+
+        // ── Заполнение ────────────────────────────────────────────────────────
+        float fillW = trackW * animatedRatio;
+        if (fillW > 0.5f) {
+            Render2D.drawRoundedRect(ctx.getMatrices(), trackX, trackY, fillW, trackH, 1.5f,
+                    new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int) (220 * ga)));
         }
 
-        // Значение
-        Color baseText = ThemeManager.getInstance().getCurrentTheme().getTextColor();
-        Color textWithAlpha = new Color(baseText.getRed(), baseText.getGreen(), baseText.getBlue(),
-                Math.max(0, Math.min(255, (int) (baseText.getAlpha() * fadeValue))));
-        String valueStr = String.valueOf(setting.getValue());
-        float valueOffset = hoverAmount * 1f;
-        Render2D.drawFont(context.getMatrices(), Fonts.BOLD.getFont(6f), valueStr,
-                scaledX + scaledWidth - Fonts.BOLD.getWidth(valueStr, 6.5f) - 4.5f + valueOffset,
-                scaledY + 5f, textWithAlpha);
+        // ── Ручка ─────────────────────────────────────────────────────────────
+        float knobR  = 4f + 1.5f * hoverAmt;
+        float knobX  = trackX + fillW - knobR;
+        float knobY  = trackY + trackH / 2f - knobR;
+        Render2D.drawRoundedRect(ctx.getMatrices(), knobX, knobY, knobR * 2f, knobR * 2f, knobR,
+                new Color(255, 255, 255, (int) (230 * ga)));
+        // Обводка ручки акцентом
+        if (hoverAmt > 0.05f) {
+            Render2D.drawRoundedRect(ctx.getMatrices(),
+                    knobX - 1f, knobY - 1f, knobR * 2f + 2f, knobR * 2f + 2f, knobR + 1f,
+                    new Color(accent.getRed(), accent.getGreen(), accent.getBlue(),
+                            (int) (120 * hoverAmt * ga)));
+        }
     }
 
     @Override
-    public void mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && MathUtils.isHovered(x + 4f, y + 12f, width - 8f, 6f, (float) mouseX, (float) mouseY)) {
+    public void mouseClicked(double mx, double my, int btn) {
+        if (btn == 0 && MathUtils.isHovered(x + 6f, y + height - 6f, width - 12f, 8f,
+                (float) mx, (float) my)) {
             drag = true;
         }
     }
 
-    @Override
-    public void mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == 0) drag = false;
-    }
-
-    @Override
-    public void keyPressed(int keyCode, int scanCode, int modifiers) {
-
-    }
-
-    @Override
-    public void keyReleased(int keyCode, int scanCode, int modifiers) {
-
-    }
-
-    @Override
-    public void charTyped(char chr, int modifiers) {
-
-    }
+    @Override public void mouseReleased(double mx, double my, int btn) { if (btn == 0) drag = false; }
+    @Override public void keyPressed(int k, int s, int m) {}
+    @Override public void keyReleased(int k, int s, int m) {}
+    @Override public void charTyped(char c, int m) {}
 }

@@ -6,7 +6,7 @@ import dev.simplevisuals.client.util.animations.Animation;
 import dev.simplevisuals.client.util.animations.Easing;
 import dev.simplevisuals.client.util.renderer.Render2D;
 import dev.simplevisuals.client.util.renderer.fonts.Fonts;
-import dev.simplevisuals.client.managers.ThemeManager; // Import ThemeManager
+import dev.simplevisuals.client.managers.ThemeManager;
 import dev.simplevisuals.modules.api.Category;
 import dev.simplevisuals.modules.api.Module;
 import dev.simplevisuals.modules.impl.render.UI;
@@ -28,656 +28,547 @@ import java.util.List;
 
 public class ClickGui extends Screen implements Wrapper {
 
-    private final Animation yAnimation = new Animation(360, 1f, true, Easing.OUT_QUART);
-    private final ThemeManager themeManager; // Add ThemeManager
+    // Анимация открытия/закрытия (fade + slide)
+    private final Animation openAnimation = new Animation(320, 1f, true, Easing.OUT_QUART);
 
-    private String description = "";
+    private final ThemeManager themeManager;
+
     private boolean closing = false;
     private float uiAlpha = 0f;
-    private float contentOffsetY = 0f;
 
+    // Категории-вкладки (горизонтально сверху)
     private static final Category[] TABS = {
             Category.Render,
             Category.Utility,
-            Category.Theme // Add Theme category
+            Category.Theme
     };
 
     private Category selectedCategory = Category.Render;
 
-    private float x, y, width, height;
+    // Размер и позиция главной панели
+    private float panelX, panelY, panelW, panelH;
 
+    // Компоненты по категориям
     private final Map<Category, List<ModuleComponent>> componentsByCategory = new EnumMap<>(Category.class);
 
+    // Скролл списка модулей
     private float scrollY = 0f;
-    private float maxScroll = 0f;
-    private float tabScrollY = 0f;
-    private float maxTabScroll = 0f;
     private float scrollYTarget = 0f;
+    private float maxScroll = 0f;
 
-    private static final int COLS = 2;
-    private static final float GAP = 8f;
-
+    // Панель настроек слева (выезжает при открытии настроек модуля)
     private ModuleComponent activeSettings = null;
     private float settingsScrollY = 0f;
-    private float settingsMaxScroll = 0f;
     private float settingsScrollYTarget = 0f;
-    private final Animation settingsAnimation = new Animation(280, 1f, true, Easing.OUT_QUART);
+    private float settingsMaxScroll = 0f;
+    private final Animation settingsAnimation = new Animation(260, 1f, false, Easing.OUT_QUART);
+
+    // Поиск
+    private String searchQuery = "";
+    private boolean searchFocused = false;
+
+    // Константы компоновки
+    private static final float TAB_H       = 28f;
+    private static final float SEARCH_H    = 28f;
+    private static final float MODULE_H    = 36f;
+    private static final float MODULE_GAP  = 6f;
+    private static final float SETTINGS_W  = 200f;
+    private static final float SETTINGS_GAP = 6f;
 
     public ClickGui() {
         super(Text.of("simplevisuals-clickgui"));
-        this.themeManager = ThemeManager.getInstance(); // Initialize ThemeManager
+        this.themeManager = ThemeManager.getInstance();
     }
 
     @Override
     public void init() {
         super.init();
-        this.width = 320f;
-        this.height = 300f;
-        this.x = (mc.getWindow().getScaledWidth() - this.width) / 2f;
-        this.y = (mc.getWindow().getScaledHeight() - this.height) / 2f; // фиксированная позиция по центру
+        // Размер панели модулей
+        panelW = 560f;
+        panelH = 370f;
+        panelX = (mc.getWindow().getScaledWidth()  - panelW) / 2f;
+        panelY = (mc.getWindow().getScaledHeight() - panelH) / 2f;
 
         buildComponentsCache();
-        scrollY = 0f;
-        scrollYTarget = 0f;
-        tabScrollY = 0f;
-
-        closing = false;
-        yAnimation.update(true); // Animation for opening (fade)
+        scrollY        = 0f;
+        scrollYTarget  = 0f;
+        activeSettings = null;
+        closing        = false;
+        openAnimation.update(true);
     }
 
     private void buildComponentsCache() {
         componentsByCategory.clear();
         for (Category cat : TABS) {
-            if (cat != Category.Theme) { // Skip Theme category for module components
-                List<Module> mods = simplevisuals.getInstance().getModuleManager().getModules(cat);
-                List<ModuleComponent> comps = new ArrayList<>(mods.size());
-                for (Module m : mods) comps.add(new ModuleComponent(m));
-                componentsByCategory.put(cat, comps);
-            }
+            if (cat == Category.Theme) continue;
+            List<Module> mods = simplevisuals.getInstance().getModuleManager().getModules(cat);
+            List<ModuleComponent> comps = new ArrayList<>(mods.size());
+            for (Module m : mods) comps.add(new ModuleComponent(m));
+            componentsByCategory.put(cat, comps);
         }
     }
 
-    // Method to play sound on module toggle or theme change
+    // ─── звук ───────────────────────────────────────────────────────────────
     private void playToggleSound(boolean wasToggled) {
-        ClientSound clientSound = simplevisuals.getInstance().getModuleManager().getModule(ClientSound.class);
-        if (clientSound != null && clientSound.isToggled()) {
-            String soundId = wasToggled ? clientSound.getDisableSoundId() : clientSound.getEnableSoundId();
-            float volume = clientSound.getVolume().getValue();
+        ClientSound cs = simplevisuals.getInstance().getModuleManager().getModule(ClientSound.class);
+        if (cs != null && cs.isToggled()) {
+            String id  = wasToggled ? cs.getDisableSoundId() : cs.getEnableSoundId();
+            float  vol = cs.getVolume().getValue();
             MinecraftClient.getInstance().getSoundManager().play(
-                    PositionedSoundInstance.master(
-                            SoundEvent.of(Identifier.of(soundId)),
-                            1.0f,
-                            volume
-                    )
-            );
+                    PositionedSoundInstance.master(SoundEvent.of(Identifier.of(id)), 1.0f, vol));
         }
     }
 
+    // ─── закрытие ────────────────────────────────────────────────────────────
     @Override
     public void close() {
         if (!closing) {
             closing = true;
-            yAnimation.update(false); // Animation for closing (fade out)
+            openAnimation.update(false);
         }
     }
 
-    @Override
-    public boolean shouldPause() {
-        return false;
-    }
+    @Override public boolean shouldPause() { return false; }
 
+    // ════════════════════════════════════════════════════════════════════════
+    //  RENDER
+    // ════════════════════════════════════════════════════════════════════════
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        float targetY = (mc.getWindow().getScaledHeight() - this.height) / 2f;
-
+    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        // Анимация
         if (closing) {
-            yAnimation.update(false);
-            // Плавное смещение к центру при закрытии (чуть ниже → к центру)
-            float offset = (1f - yAnimation.getValue()) * 12f;
-            this.y = targetY + offset;
-            if (yAnimation.getValue() <= 0.01f) {
+            openAnimation.update(false);
+            if (openAnimation.getValue() <= 0.01f) {
                 simplevisuals.getInstance().getModuleManager().getModule(UI.class).setToggled(false);
                 super.close();
                 return;
             }
         } else {
-            yAnimation.update(true);
-            // Появление: старт чуть ниже и плавно встаём по центру
-            float offset = (1f - yAnimation.getValue()) * 12f;
-            this.y = targetY + offset;
+            openAnimation.update(true);
         }
 
-        this.x = (mc.getWindow().getScaledWidth() - this.width) / 2f;
+        uiAlpha = (float) Math.max(0, Math.min(1, openAnimation.getValue()));
 
-        // Используем fade по альфе + небольшой вертикальный оффсет для контента
-        uiAlpha = Math.max(0f, Math.min(1f, yAnimation.getValue()));
-        contentOffsetY = (1f - uiAlpha) * 8f;
+        // Центрирование с небольшим slide-down при открытии
+        float centerY  = (mc.getWindow().getScaledHeight() - panelH) / 2f;
+        float slideOff = (1f - uiAlpha) * 14f;
+        panelX = (mc.getWindow().getScaledWidth() - panelW) / 2f;
+        panelY = centerY + slideOff;
 
-        // Затемнение заднего фона под GUI
-        int backdropAlpha = (int) (140 * uiAlpha);
-        if (backdropAlpha > 0) {
-            Render2D.drawRect(context.getMatrices(), 0f, 0f,
+        // Затемнение фона
+        int backdropA = (int) (160 * uiAlpha);
+        if (backdropA > 0)
+            Render2D.drawRect(ctx.getMatrices(), 0, 0,
                     mc.getWindow().getScaledWidth(), mc.getWindow().getScaledHeight(),
-                    new Color(0, 0, 0, backdropAlpha));
-        }
+                    new Color(0, 0, 0, backdropA));
 
-        // Красивое многоступенчатое свечение вокруг панели GUI
-        renderPanelGlow(context);
-
-        int alpha = (int) (255 * uiAlpha);
-        Render2D.drawRoundedRect(context.getMatrices(), x, y, width, height, 8f,
-                new Color(30, 30, 30, alpha));
-
-        renderCategories(context);
-        renderTopDescription(context);
-        renderModulesArea(context, mouseX, mouseY, delta);
-        renderBottomHints(context);
+        renderSettingsPanel(ctx, mouseX, mouseY, delta);   // слева
+        renderMainPanel(ctx, mouseX, mouseY, delta);        // справа
     }
 
-    private void renderBottomHints(DrawContext ctx) {
-        if (uiAlpha <= 0f) return;
-
-        String hint1 = I18n.translate("simplevisuals.clickgui.hint.bind");
-        String hint2 = I18n.translate("simplevisuals.clickgui.hint.settings");
-        String hint3 = I18n.translate("simplevisuals.clickgui.hint.hud_move");
-
-        float gap = 2f;
-        float fontSize = 8f;
-        float lineHeight = Fonts.MEDIUM.getHeight(fontSize) + gap;
-
-        float startY = y + height + 8f; // ниже ClickGUI
-        int textA = (int) (230 * uiAlpha);
-        Color textColor = new Color(255, 255, 255, textA);
-
-        float screenCenterX = mc.getWindow().getScaledWidth() / 2f;
-
-        // line 1
-        float w1 = Fonts.MEDIUM.getWidth(hint1, fontSize);
-        float x1 = screenCenterX - w1 / 2f;
-        Render2D.drawFont(ctx.getMatrices(), Fonts.MEDIUM.getFont(fontSize), hint1, x1, startY, textColor);
-
-        // line 2
-        float w2 = Fonts.MEDIUM.getWidth(hint2, fontSize);
-        float x2 = screenCenterX - w2 / 2f;
-        Render2D.drawFont(ctx.getMatrices(), Fonts.MEDIUM.getFont(fontSize), hint2, x2, startY + lineHeight, textColor);
-
-        // line 3
-        float w3 = Fonts.MEDIUM.getWidth(hint3, fontSize);
-        float x3 = screenCenterX - w3 / 2f;
-        Render2D.drawFont(ctx.getMatrices(), Fonts.MEDIUM.getFont(fontSize), hint3, x3, startY + lineHeight * 2f, textColor);
-    }
-
-    private void renderPanelGlow(DrawContext ctx) {
-        if (uiAlpha <= 0f) return;
-
-        float gx = x;
-        float gy = y;
-        float gw = width;
-        float gh = height;
-
-        // Шейдерный blur вокруг панели (аккуратный мягкий ореол)
-        float radius = 8f;
-        float blurRadius = 10f;
-        int a = (int) (22 * uiAlpha);
-        if (a > 0) {
-            // Немного расширим область, чтобы свечение выглядело как тень
-            Render2D.drawShaderBlurRect(ctx.getMatrices(), gx - 2f, gy - 2f, gw + 4f, gh + 4f, radius + 1f, blurRadius,
-                    new Color(255, 255, 255, a));
-        }
-    }
-
-    private void renderCategories(DrawContext ctx) {
-        float startY = y + 10f + contentOffsetY; // плавный вертикальный оффсет при открытии
-        float tabW = 40f;
-        float tabH = 15f;
-        float gap = 6f;
-
-        int tabsCount = TABS.length;
-        float totalTabsWidth = tabsCount * tabW + (tabsCount - 1) * gap;
-        float startX = x + (width - totalTabsWidth) / 2f;
-
-        startScissorScaled(ctx, x + 8f, startY, width - 16f, tabH);
-
-        float offsetX = 0f; // horizontal layout
-        for (Category cat : TABS) {
-            boolean active = cat == selectedCategory;
-            int baseAlpha = (int) (255 * uiAlpha);
-            int bgAlphaInactive = (int) (170 * uiAlpha);
-            Color currentThemeTextColor = themeManager.getCurrentTheme().getTextColor();
-            Color color = active
-                    ? themeManager.getCurrentTheme() instanceof ThemeManager.LightTheme
-                        ? new Color(0, 0, 0, baseAlpha)
-                        : new Color(currentThemeTextColor.getRed(), currentThemeTextColor.getGreen(), currentThemeTextColor.getBlue(), baseAlpha)
-                    : new Color(190, 190, 190, baseAlpha);
-
-            float drawX = startX + offsetX;
-            if (active) {
-                // Активная вкладка - акцентный цвет темы с альфой
-                Color acc = themeManager.getCurrentTheme().getAccentColor();
-                Render2D.drawRoundedRect(ctx.getMatrices(), drawX, startY, tabW, tabH, 4f,
-                        new Color(acc.getRed(), acc.getGreen(), acc.getBlue(), baseAlpha));
-            } else {
-                // Неактивные вкладки - фон с альфой
-                Render2D.drawRoundedRect(ctx.getMatrices(), drawX, startY, tabW, tabH, 4f,
-                        new Color(20, 20, 20, bgAlphaInactive));
-            }
-
-            String catName = cat.name();
-            float textWidth = Fonts.MEDIUM.getWidth(catName, 9f);
-            float textX = drawX + (tabW - textWidth) / 2f + 1.5f;
-            float textY = startY + (tabH - Fonts.MEDIUM.getHeight(9f)) / 2f + 1f;
-
-            Render2D.drawFont(ctx.getMatrices(), Fonts.MEDIUM.getFont(8f), catName,
-                    textX, textY, color);
-
-            offsetX += tabW + gap;
-        }
-
-        Render2D.stopScissor(ctx);
-    }
-
-    private void renderTopDescription(DrawContext ctx) {
-        if (description == null || description.isEmpty()) return;
-
-        String descText = I18n.translate(description);
-        float textW = Fonts.MEDIUM.getWidth(descText, 9f);
-
-        // Place just above the panel and make it overhang the panel width
-        float bgOverhang = 12f; // how far to extend past the panel on each side
-        float bgX = x - bgOverhang;
-        float bgY = y - 14f; // slightly above the ClickGUI panel
-        float bgW = width + bgOverhang * 2f;
-        float bgH = 14f;
-
-        // Center text relative to the ClickGUI panel
-        float textX = x + (width - textW) / 2f;
-        float textY = bgY - 5f;
-
-        int panelAlpha = (int) (120 * uiAlpha);
-        int textAlpha = (int) (255 * uiAlpha);
-
-        Render2D.drawFont(ctx.getMatrices(), Fonts.MEDIUM.getFont(9f), descText, textX, textY,
-                new Color(255, 255, 255, textAlpha));
-        description = "";
-    }
-
-    private void startScissorScaled(DrawContext ctx, float rx, float ry, float rw, float rh) {
-        Render2D.startScissor(ctx, rx, ry, rw, rh);
-    }
-
-    private void renderModulesArea(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        // Left content (modules/themes)
-        float tabH = 18f;
-        float leftX = x + 8f;
-        float leftY = y + 10f + tabH + 9f + contentOffsetY; // применяем оффсет
-        float leftW = width - 16f;
-        float leftH = height - ((leftY - y) + 8f);
-
-        // Smooth scroll interpolation for main list
-        float listSmooth = 0.18f;
-        scrollY += (scrollYTarget - scrollY) * listSmooth;
-        scrollY = clamp(scrollY, 0f, maxScroll);
-
-        startScissorScaled(ctx, leftX, leftY, leftW, leftH);
-
-        if (selectedCategory == Category.Theme) {
-            float themeY = leftY + 2f - scrollY;
-            float totalHeight = 0f;
-            for (ThemeManager.Theme theme : themeManager.getAvailableThemes()) {
-                Render2D.drawFont(ctx.getMatrices(), Fonts.MEDIUM.getFont(8f),
-                        theme.getName(), leftX + 6f, themeY + 2f, themeManager.getCurrentTheme().getTextColor());
-                Render2D.drawRect(ctx.getMatrices(), leftX + leftW - 20f, themeY + 2f,
-                        10f, 10f, theme.getBackgroundColor());
-                themeY += 20f;
-                totalHeight += 20f;
-            }
-            maxScroll = Math.max(0f, totalHeight - leftH);
-            scrollYTarget = clamp(scrollYTarget, 0f, maxScroll);
-            scrollY = clamp(scrollY, 0f, maxScroll);
-        } else {
-            List<ModuleComponent> comps = componentsByCategory.getOrDefault(selectedCategory, Collections.emptyList());
-            int cols = COLS;
-            float gap = GAP;
-            float colW = (leftW - gap * (cols - 1)) / cols;
-            float[] baseY = new float[cols];
-            Arrays.fill(baseY, leftY + 2f);
-            float maxBottom = leftY;
-            int placed = 0;
-            for (ModuleComponent mcComp : comps) {
-                int col = placed % cols;
-                float cx = leftX + col * (colW + gap);
-                float cyDraw = baseY[col] - scrollY;
-                mcComp.setX(cx);
-                mcComp.setY(cyDraw);
-                mcComp.setWidth(colW);
-                mcComp.setRenderExternally(true);
-                mcComp.setGlobalAlpha(uiAlpha);
-                // принудительно скрыть внутренние дети (не рисовать раскрытые настройки слева)
-                if (mcComp.getOpenAnimation().getValue() > 0f && mcComp != activeSettings) {
-                    // оставляем как есть — внутренний рендер отключён флагом renderExternally
-                }
-                mcComp.render(ctx, mouseX, mouseY, delta);
-                float totalH = mcComp.getHeight();
-                baseY[col] += totalH + gap;
-                maxBottom = Math.max(maxBottom, baseY[col]);
-                placed++;
-            }
-            float contentBottom = leftY + leftH;
-            maxScroll = Math.max(0f, (maxBottom - gap) - contentBottom);
-            scrollYTarget = clamp(scrollYTarget, 0f, maxScroll);
-            scrollY = clamp(scrollY, 0f, maxScroll);
-
-            // Мягкий оверлей для плавного исчезновения модулей при открытии/закрытии
-            float tModules = 1f - uiAlpha;
-            float easedModules = tModules * tModules * (3f - 2f * tModules); // smoothstep
-            int modulesOverlayAlpha = (int) (140 * easedModules);
-            if (modulesOverlayAlpha > 2) {
-                Render2D.drawRoundedRect(ctx.getMatrices(), leftX + 1f, leftY + 1f, leftW - 2f, leftH - 2f, 3f,
-                        new Color(30, 30, 30, modulesOverlayAlpha));
-            }
-        }
-
-        Render2D.stopScissor(ctx);
-
-        // Scrollbar for modules/themes list when content overflows (rendered to the right of ClickGUI)
-        if (maxScroll > 0.5f) {
-            float trackX = x + width - 4f;
-            float trackY = leftY;
-            float trackW = 2f;
-            float trackH = leftH;
-            Render2D.drawRect(ctx.getMatrices(), trackX, trackY, trackW, trackH,
-                    new Color(0, 0, 0, Math.min(90, (int) (90f * uiAlpha))));
-
-            float visibleRatio = leftH / Math.max(leftH + maxScroll, 1f);
-            float thumbH = Math.max(14f, trackH * visibleRatio);
-            float maxThumbTravel = trackH - thumbH;
-            float scrollRatio = maxScroll <= 0f ? 0f : (scrollY / maxScroll);
-            float thumbY = trackY + maxThumbTravel * scrollRatio;
-            Color thumbColor = new Color(
-                    themeManager.getCurrentTheme().getAccentColor().getRed(),
-                    themeManager.getCurrentTheme().getAccentColor().getGreen(),
-                    themeManager.getCurrentTheme().getAccentColor().getBlue(),
-                    Math.min(180, (int) (180f * uiAlpha))
-            );
-            Render2D.drawRoundedRect(ctx.getMatrices(), trackX - 0.5f, thumbY, trackW + 1f, thumbH, 1.5f, thumbColor);
-        }
-
-        ModuleComponent target = activeSettings;
-        boolean hasSettings = target != null && !target.getComponents().isEmpty();
-        // settings panel animation
+    // ─── Панель настроек (слева, выезжает) ──────────────────────────────────
+    private void renderSettingsPanel(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        boolean hasSettings = activeSettings != null && !activeSettings.getComponents().isEmpty();
         settingsAnimation.update(hasSettings);
-        float anim = settingsAnimation.getValue();
-        if (anim > 0.01f) {
-            // right settings panel (slides in from right with fade)
-            float basePanelX = x + width + 5f;
-            float panelY = y + 90f + contentOffsetY; // применяем оффсет
-            float panelW = 120f;
-            float panelH = (height - 200f);
-            float slideOffset = (1f - anim) * 40f;
-            float drawPanelX = basePanelX + slideOffset;
+        float anim = (float) settingsAnimation.getValue();
+        if (anim <= 0.01f) return;
 
-            int settingsAlpha = (int) (255 * Math.min(1f, anim * uiAlpha));
-            float smoothPanel = (float) (Math.pow(Math.min(1f, anim * uiAlpha), 2) * (3 - 2 * Math.min(1f, anim * uiAlpha)));
-            int panelA = (int) (255 * smoothPanel);
+        float alpha    = Math.min(1f, anim * uiAlpha);
+        int   panelA   = (int) (255 * alpha);
+        float slideOff = (1f - anim) * 30f;
 
-            // Убрали blur под панелью настроек: лёгкая подложка
-            Render2D.drawRoundedRect(ctx.getMatrices(), drawPanelX - 1f, panelY - 1f, panelW + 2f, panelH + 2f, 3f,
-                    new Color(255, 255, 255, Math.min(18, (int) (18f * anim * uiAlpha))));
+        float spX = panelX - SETTINGS_W - SETTINGS_GAP + slideOff;
+        float spY = panelY;
+        float spH = panelH;
 
-            Render2D.drawRoundedRect(ctx.getMatrices(), drawPanelX, panelY, panelW, panelH, 3f,
-                    new Color(30, 30, 30, panelA));
+        // Фон панели настроек
+        Render2D.drawRoundedRect(ctx.getMatrices(), spX, spY, SETTINGS_W, spH, 10f,
+                new Color(18, 18, 24, panelA));
 
-            float rContentX = drawPanelX + 8f;
-            float rContentY = panelY + 8f;
-            float rContentW = panelW - 16f;
-            float rContentH = panelH - 16f;
+        // Заголовок
+        float titleY = spY + 14f;
+        int   textA  = (int) (255 * alpha);
+        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(9f),
+                activeSettings != null ? I18n.translate(activeSettings.getModule().getName()) : "null",
+                spX + 14f, titleY, new Color(255, 255, 255, textA));
 
-            float total = 0f;
-            if (hasSettings) {
-                target.setGlobalAlpha(Math.min(1f, anim * uiAlpha));
-                total = target.renderSettingsExternally(ctx, rContentX, rContentY, rContentW,
-                        rContentX, rContentY, rContentW, rContentH, mouseX, mouseY, delta, settingsScrollY);
+        // Разделитель
+        Render2D.drawRect(ctx.getMatrices(), spX + 10f, spY + 30f, SETTINGS_W - 20f, 1f,
+                new Color(255, 255, 255, (int) (30 * alpha)));
+
+        // Контент настроек
+        float cX = spX + 8f;
+        float cY = spY + 38f;
+        float cW = SETTINGS_W - 16f;
+        float cH = spH - 46f;
+
+        // Скролл
+        float smooth = 0.18f;
+        settingsScrollY += (settingsScrollYTarget - settingsScrollY) * smooth;
+        settingsScrollY = clamp(settingsScrollY, 0f, settingsMaxScroll);
+
+        Render2D.startScissor(ctx, cX, cY, cW, cH);
+        if (activeSettings != null) {
+            activeSettings.setGlobalAlpha(alpha);
+            float total = activeSettings.renderSettingsExternally(
+                    ctx, cX, cY, cW, cX, cY, cW, cH, mouseX, mouseY, delta, settingsScrollY);
+            settingsMaxScroll = Math.max(0f, total - cH);
+        }
+        Render2D.stopScissor(ctx);
+
+        // Скроллбар настроек
+        renderScrollbar(ctx, spX + SETTINGS_W - 4f, cY, cH, settingsScrollY, settingsMaxScroll, alpha);
+    }
+
+    // ─── Главная панель (модули) ─────────────────────────────────────────────
+    private void renderMainPanel(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        int panelA = (int) (255 * uiAlpha);
+
+        // Фон главной панели
+        Render2D.drawRoundedRect(ctx.getMatrices(), panelX, panelY, panelW, panelH, 10f,
+                new Color(14, 14, 20, panelA));
+
+        renderHeader(ctx);
+        renderModuleList(ctx, mouseX, mouseY, delta);
+    }
+
+    // ─── Шапка: логотип + вкладки + поиск ───────────────────────────────────
+    private void renderHeader(DrawContext ctx) {
+        int textA = (int) (255 * uiAlpha);
+
+        // Логотип / название клиента
+        String logo = "DontVisuals";
+        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(11f),
+                logo, panelX + 18f, panelY + 12f,
+                new Color(255, 255, 255, textA));
+
+        // Разделитель под шапкой
+        Render2D.drawRect(ctx.getMatrices(), panelX, panelY + 34f, panelW, 1f,
+                new Color(255, 255, 255, (int) (20 * uiAlpha)));
+
+        // Вкладки — горизонтально
+        float tabStartX = panelX + 14f;
+        float tabY      = panelY + 40f;
+        float tabW      = 68f;
+        float tabGap    = 4f;
+        Color accent    = themeManager.getCurrentTheme().getAccentColor();
+
+        for (int i = 0; i < TABS.length; i++) {
+            Category cat   = TABS[i];
+            boolean active = cat == selectedCategory;
+            float   tx     = tabStartX + i * (tabW + tabGap);
+            String  label  = cat.name();
+
+            if (active) {
+                // Активная вкладка: акцентный фон
+                Render2D.drawRoundedRect(ctx.getMatrices(), tx, tabY, tabW, TAB_H, 6f,
+                        new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int) (220 * uiAlpha)));
+                float tw = Fonts.BOLD.getWidth(label, 8.5f);
+                Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(8.5f), label,
+                        tx + (tabW - tw) / 2f, tabY + (TAB_H - Fonts.BOLD.getHeight(8.5f)) / 2f,
+                        new Color(255, 255, 255, textA));
+            } else {
+                // Неактивная вкладка: прозрачный фон
+                Render2D.drawRoundedRect(ctx.getMatrices(), tx, tabY, tabW, TAB_H, 6f,
+                        new Color(255, 255, 255, (int) (12 * uiAlpha)));
+                float tw = Fonts.MEDIUM.getWidth(label, 8.5f);
+                Render2D.drawFont(ctx.getMatrices(), Fonts.MEDIUM.getFont(8.5f), label,
+                        tx + (tabW - tw) / 2f, tabY + (TAB_H - Fonts.MEDIUM.getHeight(8.5f)) / 2f,
+                        new Color(180, 180, 190, textA));
             }
-            settingsMaxScroll = Math.max(0f, total - rContentH);
-            scrollYTarget = clamp(scrollYTarget, 0f, maxScroll);
-            scrollY = clamp(scrollY, 0f, maxScroll);
-            settingsScrollYTarget = clamp(settingsScrollYTarget, 0f, settingsMaxScroll);
-            // Smooth scroll interpolation for settings list
-            float settingsSmooth = 0.2f;
-            settingsScrollY += (settingsScrollYTarget - settingsScrollY) * settingsSmooth;
-            settingsScrollY = clamp(settingsScrollY, 0f, settingsMaxScroll);
+        }
 
-            // vertical scrollbar on the right of settings content
-            if (settingsMaxScroll > 0.5f) {
-                float trackX = drawPanelX + panelW - 3f;
-                float trackY = rContentY;
-                float trackW = 2f;
-                float trackH = rContentH;
-                Render2D.drawRect(ctx.getMatrices(), trackX, trackY, trackW, trackH,
-                        new Color(0, 0, 0, Math.min(90, (int) (90f * anim * uiAlpha))));
+        // Поле поиска — справа
+        float searchX = panelX + panelW - 160f - 14f;
+        float searchY = tabY;
+        float searchW = 160f;
+        renderSearchBox(ctx, searchX, searchY, searchW, TAB_H);
+    }
 
-                float visibleRatio = rContentH / Math.max(rContentH + settingsMaxScroll, 1f);
-                float thumbH = Math.max(14f, trackH * visibleRatio);
-                float maxThumbTravel = trackH - thumbH;
-                float scrollRatio = settingsMaxScroll <= 0f ? 0f : (settingsScrollY / settingsMaxScroll);
-                float thumbY = trackY + maxThumbTravel * scrollRatio;
-                Color thumbColor = new Color(
-                        themeManager.getCurrentTheme().getAccentColor().getRed(),
-                        themeManager.getCurrentTheme().getAccentColor().getGreen(),
-                        themeManager.getCurrentTheme().getAccentColor().getBlue(),
-                        Math.min(180, (int) (180f * anim * uiAlpha))
-                );
-                Render2D.drawRoundedRect(ctx.getMatrices(), trackX - 0.5f, thumbY, trackW + 1f, thumbH, 1.5f, thumbColor);
-            }
+    private void renderSearchBox(DrawContext ctx, float sx, float sy, float sw, float sh) {
+        int a = (int) (255 * uiAlpha);
+        // Фон поля
+        Render2D.drawRoundedRect(ctx.getMatrices(), sx, sy, sw, sh, 6f,
+                new Color(255, 255, 255, (int) (14 * uiAlpha)));
 
-            // Мягкий скруглённый оверлей над содержимым (снижаем альфу и убираем жёсткие края) с плавной кривой
-            float tSettings = 1f - Math.min(1f, anim * uiAlpha);
-            float easedSettings = tSettings * tSettings * (3f - 2f * tSettings); // smoothstep
-            int contentOverlayAlpha = (int) (160 * easedSettings);
-            if (contentOverlayAlpha > 6) {
-                Render2D.drawRoundedRect(ctx.getMatrices(), rContentX, rContentY, rContentW, rContentH, 2f,
-                        new Color(30, 30, 30, contentOverlayAlpha));
-            }
+        // Иконка лупы (текстовая заглушка)
+        Render2D.drawFont(ctx.getMatrices(), Fonts.SEMIBOLD.getFont(9f), "D",
+                sx + 8f, sy + (sh - Fonts.SEMIBOLD.getHeight(9f)) / 2f,
+                new Color(120, 120, 140, a));
+
+        // Текст или placeholder
+        String display = searchQuery.isEmpty() ? "Search..." : searchQuery;
+        Color  col     = searchQuery.isEmpty()
+                ? new Color(100, 100, 120, a)
+                : new Color(220, 220, 230, a);
+        Render2D.drawFont(ctx.getMatrices(), Fonts.SEMIBOLD.getFont(8f), display,
+                sx + 22f, sy + (sh - Fonts.SEMIBOLD.getHeight(8f)) / 2f, col);
+
+        // Мигающий курсор при фокусе
+        if (searchFocused) {
+            float cursorX = sx + 22f + Fonts.BOLD.getWidth(searchQuery, 8f);
+            float cursorY = sy + (sh - Fonts.BOLD.getHeight(8f)) / 2f;
+            Render2D.drawRect(ctx.getMatrices(), cursorX + 1f, cursorY,
+                    1f, Fonts.REGULAR.getHeight(8f),
+                    new Color(200, 200, 220, (int) (180 * uiAlpha)));
         }
     }
 
+    // ─── Список модулей ──────────────────────────────────────────────────────
+    private void renderModuleList(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        float listX = panelX + 10f;
+        float listY = panelY + TAB_H + SEARCH_H + 28f;   // ниже шапки
+        float listW = panelW - 20f;
+        float listH = panelH - (listY - panelY) - 10f;
+
+        // Скролл
+        float smooth = 0.18f;
+        scrollY += (scrollYTarget - scrollY) * smooth;
+        scrollY  = clamp(scrollY, 0f, maxScroll);
+
+        List<ModuleComponent> comps = getFilteredComponents();
+        if (comps == null) comps = Collections.emptyList();
+
+        Render2D.startScissor(ctx, listX, listY, listW, listH);
+
+        float curY     = listY - scrollY;
+        float maxBottom = listY;
+
+        for (ModuleComponent mc : comps) {
+            mc.setX(listX);
+            mc.setY(curY);
+            mc.setWidth(listW);
+            mc.setHeight(MODULE_H);
+            mc.setRenderExternally(true);
+            mc.setGlobalAlpha(uiAlpha);
+            mc.render(ctx, mouseX, mouseY, delta);
+            float h = mc.getHeight() + MODULE_GAP;
+            curY    += h;
+            maxBottom = Math.max(maxBottom, listY - scrollY + (curY - (listY - scrollY)));
+        }
+
+        Render2D.stopScissor(ctx);
+
+        // Пересчёт maxScroll
+        float contentH = comps.size() * (MODULE_H + MODULE_GAP);
+        maxScroll = Math.max(0f, contentH - listH);
+        scrollYTarget = clamp(scrollYTarget, 0f, maxScroll);
+
+        // Скроллбар
+        renderScrollbar(ctx, panelX + panelW - 4f, listY, listH, scrollY, maxScroll, uiAlpha);
+    }
+
+    private List<ModuleComponent> getFilteredComponents() {
+        List<ModuleComponent> base = componentsByCategory.getOrDefault(selectedCategory, Collections.emptyList());
+        if (searchQuery.isEmpty()) return base;
+        List<ModuleComponent> filtered = new ArrayList<>();
+        String q = searchQuery.toLowerCase();
+        for (ModuleComponent mc : base) {
+            if (mc.getModule().getName().toLowerCase().contains(q)) filtered.add(mc);
+        }
+        return filtered;
+    }
+
+    // ─── Скроллбар (универсальный) ───────────────────────────────────────────
+    private void renderScrollbar(DrawContext ctx, float trackX, float trackY,
+                                 float trackH, float scroll, float maxScr, float alpha) {
+        if (maxScr <= 0.5f) return;
+        Color accent = themeManager.getCurrentTheme().getAccentColor();
+
+        Render2D.drawRect(ctx.getMatrices(), trackX, trackY, 2f, trackH,
+                new Color(0, 0, 0, (int) (80 * alpha)));
+
+        float ratio    = trackH / Math.max(trackH + maxScr, 1f);
+        float thumbH   = Math.max(16f, trackH * ratio);
+        float travel   = trackH - thumbH;
+        float thumbY   = trackY + travel * (maxScr <= 0f ? 0f : scroll / maxScr);
+        Render2D.drawRoundedRect(ctx.getMatrices(), trackX - 0.5f, thumbY, 3f, thumbH, 1.5f,
+                new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int) (200 * alpha)));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  ВВОД
+    // ════════════════════════════════════════════════════════════════════════
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(double mx, double my, int btn) {
         if (closing) return false;
 
-        float startY = y + 10f + contentOffsetY;
-        float tabW = 40f;
-        float tabH = 15f;
-        float gap = 6f;
-        int tabsCount = TABS.length;
-        float totalTabsWidth = tabsCount * tabW + (tabsCount - 1) * gap;
-        float startX = x + (width - totalTabsWidth) / 2f;
-
-        // Handle category tab clicks (horizontal)
-        float offsetX = 0f;
-        for (Category cat : TABS) {
-            float drawX = startX + offsetX;
-            if (mouseX >= drawX && mouseX <= drawX + tabW &&
-                    mouseY >= startY && mouseY <= startY + tabH) {
-                selectedCategory = cat;
-                scrollY = 0f;
-                scrollYTarget = 0f;
-                activeSettings = null;
+        // ── Клики по вкладкам ──
+        float tabStartX = panelX + 14f;
+        float tabY      = panelY + 40f;
+        float tabW      = 68f;
+        float tabGap    = 4f;
+        for (int i = 0; i < TABS.length; i++) {
+            float tx = tabStartX + i * (tabW + tabGap);
+            if (mx >= tx && mx <= tx + tabW && my >= tabY && my <= tabY + TAB_H) {
+                selectedCategory = TABS[i];
+                scrollY          = 0f;
+                scrollYTarget    = 0f;
+                activeSettings   = null;
+                searchQuery      = "";
+                searchFocused    = false;
                 return true;
             }
-            offsetX += tabW + gap;
         }
 
-        // Left content area bounds
-        float leftX = x + 8f;
-        float leftY = y + 10f + tabH + 9f + contentOffsetY;
-        float leftW = width - 16f;
-        float leftH = height - ((leftY - y) + 8f);
+        // ── Клик по полю поиска ──
+        float searchX = panelX + panelW - 160f - 14f;
+        float searchY = tabY;
+        if (mx >= searchX && mx <= searchX + 160f && my >= searchY && my <= searchY + TAB_H) {
+            searchFocused = true;
+            return true;
+        } else {
+            searchFocused = false;
+        }
 
-        if (mouseX >= leftX && mouseX <= leftX + leftW && mouseY >= leftY && mouseY <= leftY + leftH) {
-            if (selectedCategory == Category.Theme && button == 0) {
-                float themeY = leftY + 2f - scrollY;
-                for (ThemeManager.Theme theme : themeManager.getAvailableThemes()) {
-                    if (mouseX >= leftX && mouseX <= leftX + leftW && mouseY >= themeY && mouseY <= themeY + 20f) {
-                        ThemeManager.Theme previousTheme = themeManager.getCurrentTheme();
-                        themeManager.setTheme(theme);
-                        if (previousTheme != theme) { playToggleSound(true); }
-                        return true;
-                    }
-                    themeY += 20f;
+        // ── Список модулей ──
+        float listX = panelX + 10f;
+        float listY = panelY + TAB_H + SEARCH_H + 28f;
+        float listW = panelW - 20f;
+        float listH = panelH - (listY - panelY) - 10f;
+
+        if (mx >= listX && mx <= listX + listW && my >= listY && my <= listY + listH) {
+            List<ModuleComponent> comps = getFilteredComponents();
+            if (comps == null) comps = Collections.emptyList();
+
+            // Сначала проверяем открытые bind-меню
+            for (ModuleComponent mc : comps) {
+                if (mc.isBindModeMenuOpen()) { mc.mouseClicked(mx, my, btn); return true; }
+            }
+
+            for (ModuleComponent mc : comps) {
+                boolean wasToggled = mc.getModule().isToggled();
+                float   headerH    = mc.getHeight();
+
+                // ПКМ по заголовку → открыть настройки слева
+                if (btn == 1 && mx >= mc.getX() && mx <= mc.getX() + mc.getWidth()
+                        && my >= mc.getY() && my <= mc.getY() + headerH) {
+                    activeSettings       = mc.getComponents().isEmpty() ? null : mc;
+                    settingsScrollY      = 0f;
+                    settingsScrollYTarget = 0f;
+                    return true;
                 }
-            } else {
-                List<ModuleComponent> comps = componentsByCategory.getOrDefault(selectedCategory, Collections.emptyList());
-                // Если какое-либо меню бинда открыто — сделать модальным: обработать клик только этим компонентом
-                for (ModuleComponent mcComp : comps) {
-                    if (mcComp.isBindModeMenuOpen()) {
-                        mcComp.mouseClicked(mouseX, mouseY, button);
-                        return true;
-                    }
-                }
-                for (ModuleComponent mcComp : comps) {
-                    boolean wasToggled = mcComp.getModule().isToggled();
-                    float headerH = 24f;
-                    if (button == 1 && mouseX >= mcComp.getX() && mouseX <= mcComp.getX() + mcComp.getWidth() &&
-                            mouseY >= mcComp.getY() && mouseY <= mcComp.getY() + headerH) {
-                        activeSettings = mcComp.getComponents().isEmpty() ? null : mcComp;
-                        settingsScrollY = 0f;
-                        settingsScrollYTarget = 0f;
-                    }
-                    mcComp.mouseClicked(mouseX, mouseY, button);
-                    if (button == 0 && wasToggled != mcComp.getModule().isToggled()) {
-                        playToggleSound(wasToggled);
-                    }
-                }
+
+                mc.mouseClicked(mx, my, btn);
+                if (btn == 0 && wasToggled != mc.getModule().isToggled())
+                    playToggleSound(wasToggled);
             }
         }
 
-        // Right panel interactions for settings (only if shown)
+        // ── Панель настроек (клики по компонентам) ──
         if (activeSettings != null && !activeSettings.getComponents().isEmpty()) {
-            float anim = settingsAnimation.getValue();
-            if (anim > 0.2f) {
-                float basePanelX = x + width + 5f;
-                float panelY = y + 90f + contentOffsetY;
-                float panelW = 120f;
-                float panelH = (height - 200f);
-                float slideOffset = (1f - anim) * 40f;
-                float drawPanelX = basePanelX + slideOffset;
-                float rContentX = drawPanelX + 8f;
-                float rContentY = panelY + 8f;
-                float rContentW = panelW - 16f;
-                float rContentH = panelH - 16f;
-                if (mouseX >= rContentX && mouseX <= rContentX + rContentW && mouseY >= rContentY && mouseY <= rContentY + rContentH) {
-                    activeSettings.mouseClickedExternal(mouseX, mouseY, button);
+            float anim  = (float) settingsAnimation.getValue();
+            if (anim > 0.1f) {
+                float slideOff = (1f - anim) * 30f;
+                float spX  = panelX - SETTINGS_W - SETTINGS_GAP + slideOff;
+                float cX   = spX + 8f;
+                float cY   = panelY + 38f;
+                float cW   = SETTINGS_W - 16f;
+                float cH   = panelH - 46f;
+                if (mx >= cX && mx <= cX + cW && my >= cY && my <= cY + cH) {
+                    activeSettings.mouseClickedExternal(mx, my, btn);
                     return true;
                 }
             }
         }
 
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(mx, my, btn);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (selectedCategory != Category.Theme) {
-            List<ModuleComponent> comps = componentsByCategory.getOrDefault(selectedCategory, Collections.emptyList());
-            for (ModuleComponent mcComp : comps) {
-                if (mcComp.isBindModeMenuOpen()) {
-                    mcComp.mouseReleased(mouseX, mouseY, button);
-                    return true;
-                }
+    public boolean mouseReleased(double mx, double my, int btn) {
+        List<ModuleComponent> comps = getFilteredComponents();
+        if (comps != null) {
+            for (ModuleComponent mc : comps) {
+                if (mc.isBindModeMenuOpen()) { mc.mouseReleased(mx, my, btn); return true; }
             }
+            for (ModuleComponent mc : comps) mc.mouseReleased(mx, my, btn);
         }
-        if (selectedCategory != Category.Theme) {
-            List<ModuleComponent> comps = componentsByCategory.getOrDefault(selectedCategory, Collections.emptyList());
-            for (ModuleComponent mcComp : comps) {
-                mcComp.mouseReleased(mouseX, mouseY, button);
-            }
-        }
-        if (activeSettings != null) {
-            activeSettings.mouseReleasedExternal(mouseX, mouseY, button);
-        }
-        return super.mouseReleased(mouseX, mouseY, button);
+        if (activeSettings != null) activeSettings.mouseReleasedExternal(mx, my, btn);
+        return super.mouseReleased(mx, my, btn);
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
-        float tabH = 18f;
-        float leftX = x + 8f;
-        float leftY = y + 10f + tabH + 9f + contentOffsetY;
-        float leftW = width - 16f;
-        float leftH = height - ((leftY - y) + 8f);
-        float step = (float) (-vertical * 10f);
-        if (mouseX >= leftX && mouseX <= leftX + leftW && mouseY >= leftY && mouseY <= leftY + leftH) {
+    public boolean mouseScrolled(double mx, double my, double h, double v) {
+        float listX = panelX + 10f;
+        float listY = panelY + TAB_H + SEARCH_H + 28f;
+        float listW = panelW - 20f;
+        float listH = panelH - (listY - panelY) - 10f;
+
+        float step = (float) (-v * 12f);
+
+        if (mx >= listX && mx <= listX + listW && my >= listY && my <= listY + listH) {
             scrollYTarget = clamp(scrollYTarget + step, 0f, maxScroll);
             return true;
         }
 
+        // Скролл панели настроек
         if (activeSettings != null && !activeSettings.getComponents().isEmpty()) {
-            float anim = settingsAnimation.getValue();
-            if (anim > 0.2f) {
-                float basePanelX = x + width + 5f;
-                float panelY = y + 90f + contentOffsetY;
-                float panelW = 120f;
-                float panelH = (height - 200f);
-                float slideOffset = (1f - anim) * 40f;
-                float drawPanelX = basePanelX + slideOffset;
-                float rContentX = drawPanelX + 8f;
-                float rContentY = panelY + 8f;
-                float rContentW = panelW - 16f;
-                float rContentH = panelH - 16f;
-                if (mouseX >= rContentX && mouseX <= rContentX + rContentW && mouseY >= rContentY && mouseY <= rContentY + rContentH) {
+            float anim = (float) settingsAnimation.getValue();
+            if (anim > 0.1f) {
+                float slideOff = (1f - anim) * 30f;
+                float spX  = panelX - SETTINGS_W - SETTINGS_GAP + slideOff;
+                float cX   = spX + 8f;
+                float cY   = panelY + 38f;
+                float cW   = SETTINGS_W - 16f;
+                float cH   = panelH - 46f;
+                if (mx >= cX && mx <= cX + cW && my >= cY && my <= cY + cH) {
                     settingsScrollYTarget = clamp(settingsScrollYTarget + step, 0f, settingsMaxScroll);
                     return true;
                 }
             }
         }
-        return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);
+        return super.mouseScrolled(mx, my, h, v);
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int key, int scan, int mods) {
         if (closing) return false;
 
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (searchFocused && !searchQuery.isEmpty()) {
+                searchQuery   = "";
+                searchFocused = false;
+                return true;
+            }
             close();
             return true;
         }
 
-        if (selectedCategory != Category.Theme) {
-            List<ModuleComponent> comps = componentsByCategory.getOrDefault(selectedCategory, Collections.emptyList());
-            for (ModuleComponent mcComp : comps) {
-                mcComp.keyPressed(keyCode, scanCode, modifiers);
+        // Поиск
+        if (searchFocused) {
+            if (key == GLFW.GLFW_KEY_BACKSPACE && !searchQuery.isEmpty()) {
+                searchQuery = searchQuery.substring(0, searchQuery.length() - 1);
+                return true;
             }
-        }
-        if (activeSettings != null) {
-            activeSettings.keyPressedExternal(keyCode, scanCode, modifiers);
+            return true;
         }
 
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        List<ModuleComponent> comps = getFilteredComponents();
+        if (comps != null) for (ModuleComponent mc : comps) mc.keyPressed(key, scan, mods);
+        if (activeSettings != null) activeSettings.keyPressedExternal(key, scan, mods);
+
+        return super.keyPressed(key, scan, mods);
     }
 
     @Override
-    public boolean charTyped(char chr, int modifiers) {
+    public boolean charTyped(char chr, int mods) {
         if (closing) return false;
 
-        if (selectedCategory != Category.Theme) {
-            List<ModuleComponent> comps = componentsByCategory.getOrDefault(selectedCategory, Collections.emptyList());
-            for (ModuleComponent mcComp : comps) {
-                mcComp.charTyped(chr, modifiers);
-            }
-        }
-        if (activeSettings != null) {
-            activeSettings.charTypedExternal(chr, modifiers);
+        if (searchFocused) {
+            searchQuery += chr;
+            return true;
         }
 
-        return super.charTyped(chr, modifiers);
+        List<ModuleComponent> comps = getFilteredComponents();
+        if (comps != null) for (ModuleComponent mc : comps) mc.charTyped(chr, mods);
+        if (activeSettings != null) activeSettings.charTypedExternal(chr, mods);
+
+        return super.charTyped(chr, mods);
     }
 
-    public void setDescription(String text) {
-        this.description = text == null ? "" : text;
-    }
-
-    private static float clamp(float v, float min, float max) {
-        return Math.max(min, Math.min(max, v));
+    // ─── утилиты ─────────────────────────────────────────────────────────────
+    private static float clamp(float v, float lo, float hi) {
+        return Math.max(lo, Math.min(hi, v));
     }
 }

@@ -56,10 +56,10 @@ public class Watermark extends HudElement implements ThemeManager.ThemeChangeLis
         var matrices = e.getContext().getMatrices();
         Font fontBold = Fonts.BOLD;
         Font fontRegular = Fonts.REGULAR;
-        Font fontIcons = Fonts.ICONS;
+        Font fontIcons = Fonts.SEMIBOLD;
 
-        String title = "SimpleVisuals";
-        String link = "t.me/SimpleVisuals";
+        String title = "DontVisuals";
+        String link = "t.me/dontvisuals";
 
         // размеры шрифтов (как у тебя)
         float fontSizeTitle = 9f;
@@ -107,7 +107,7 @@ public class Watermark extends HudElement implements ThemeManager.ThemeChangeLis
         Render2D.drawFont(
                 matrices,
                 fontIcons.getFont(logoSize),
-                "R",
+                "D",
                 getX() + paddingX,
                 getY() + (totalHeight - logoSize) / 2f,
                 liveAccent

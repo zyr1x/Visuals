@@ -21,7 +21,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import dev.simplevisuals.modules.settings.impl.BooleanSetting;
-import dev.simplevisuals.client.ui.hud.impl.HotbarHUD;
 
 @Mixin(InGameHud.class)
 public abstract class InGameHudMixin {
@@ -30,34 +29,6 @@ public abstract class InGameHudMixin {
     public void render(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
         EventRender2D event = new EventRender2D(context, tickCounter);
         simplevisuals.getInstance().getEventHandler().post(event);
-    }
-
-    @Inject(method = "renderHotbar", at = @At("HEAD"), cancellable = true)
-    public void renderHotbar(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
-        try {
-            var setting = simplevisuals.getInstance().getHudManager().getElements().getName("Hotbar");
-            if (setting instanceof BooleanSetting bs && bs.getValue()) {
-                ci.cancel();
-            }
-        } catch (Throwable ignored) {}
-    }
-
-    // Cancel vanilla status bars when custom Hotbar HUD is enabled
-    @Inject(method = "renderStatusBars", at = @At("HEAD"), cancellable = true)
-    public void cancelStatusBars(DrawContext context, CallbackInfo ci) {
-        if (isHudHotbarEnabled()) ci.cancel();
-    }
-
-    // Cancel vanilla XP bar when custom Hotbar HUD is enabled
-    @Inject(method = "renderExperienceBar", at = @At("HEAD"), cancellable = true)
-    public void cancelXpBar(DrawContext context, int i, CallbackInfo ci) {
-        if (isHudHotbarEnabled()) ci.cancel();
-    }
-
-    // Cancel vanilla XP level text when custom Hotbar HUD is enabled
-    @Inject(method = "renderExperienceLevel", at = @At("HEAD"), cancellable = true)
-    public void cancelXpLevel(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
-        if (isHudHotbarEnabled()) ci.cancel();
     }
 
     @Unique

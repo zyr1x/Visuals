@@ -12,95 +12,105 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.resource.language.I18n;
 
 import java.awt.*;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 import dev.simplevisuals.client.managers.ThemeManager;
 
 public class EnumComponent extends Component {
 
     private final EnumSetting<?> setting;
-    private final Animation openAnimation = new Animation(300, 1f, false, Easing.BOTH_SINE);
-    private final Map<Enum<?>, Animation> pickAnimations = new HashMap<>();
+    private final Animation openAnim = new Animation(250, 1f, false, Easing.BOTH_SINE);
+    private final Map<Enum<?>, Animation> pickAnims = new HashMap<>();
     private boolean open;
 
     public EnumComponent(EnumSetting<?> setting) {
         super(setting.getName());
         this.setting = setting;
-        for (Enum<?> enums : setting.getValue().getClass().getEnumConstants()) pickAnimations.put(enums, new Animation(300, 1f, false, Easing.BOTH_SINE));
-        this.addHeight = () -> openAnimation.getValue() > 0 ? ((setting.getValue().getClass().getEnumConstants().length * 14f)) * openAnimation.getValue() : 0;
+        for (Enum<?> e : setting.getValue().getClass().getEnumConstants())
+            pickAnims.put(e, new Animation(220, 1f, false, Easing.BOTH_SINE));
+        this.addHeight = () -> openAnim.getValue() > 0
+                ? (setting.getValue().getClass().getEnumConstants().length * 18f) * (float) openAnim.getValue()
+                : 0f;
         this.visible = setting::isVisible;
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        openAnimation.update(open);
+    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        float ga = Math.max(0f, Math.min(1f, getGlobalAlpha()));
+        openAnim.update(open);
 
-        Render2D.drawFont(context.getMatrices(),
-                Fonts.BOLD.getFont(7.5f),
-                I18n.translate(setting.getName()) + ": " + I18n.translate(setting.currentEnumName()),
-                x + 4f,
-                y + 3f,
-                ThemeManager.getInstance().getCurrentTheme().getTextColor()
-        );
+        Color themeText = ThemeManager.getInstance().getCurrentTheme().getTextColor();
+        Color accent    = ThemeManager.getInstance().getCurrentTheme().getAccentColor();
 
-        if (openAnimation.getValue() > 0) {
-            float yOffset = height;
-            for (Enum<?> enums : setting.getValue().getClass().getEnumConstants()) {
-                Render2D.startScissor(context, x, y + yOffset, width, 14f);
-                Animation anim = pickAnimations.get(enums);
-                anim.update(enums == setting.getValue());
-                Color accent = ThemeManager.getInstance().getCurrentTheme().getAccentColor();
-                Render2D.drawFont(context.getMatrices(), Fonts.ICONS.getFont(10f), "D", x + width - 14f, y + yOffset + 2f,
-                        new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int) (255 * anim.getValue())));
-                Render2D.drawFont(context.getMatrices(),
-                        Fonts.BOLD.getFont(7.5f),
-                        I18n.translate(((Nameable) enums).getName()),
-                        x + 6f,
-                        y + yOffset + 2f,
-                        ThemeManager.getInstance().getCurrentTheme().getTextColor()
-                );
-                yOffset += 14f;
-                Render2D.stopScissor(context);
-            }
-        }
-    }
+        // ── Фон строки ──────────────────────────────────────────────────────
+        Render2D.drawRoundedRect(ctx.getMatrices(), x, y, width, height, 5f,
+                new Color(255, 255, 255, (int) (8 * ga)));
 
-    @Override
-    public void mouseClicked(double mouseX, double mouseY, int button) {
-        if (MathUtils.isHovered(x, y, width, height, (float) mouseX, (float) mouseY)) {
-            if (button == 0) setting.increaseEnum();
-            else if (button == 1) open = !open;
-        }
+        // ── Текст: Название: Значение ─────────────────────────────────────────
+        String label = I18n.translate(setting.getName()) + ": "
+                + I18n.translate(setting.currentEnumName());
+        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7.5f),
+                label, x + 6f, y + (height - Fonts.BOLD.getHeight(7.5f)) / 2f,
+                new Color(themeText.getRed(), themeText.getGreen(), themeText.getBlue(),
+                        (int) (themeText.getAlpha() * ga)));
 
-        if (open && button == 0) {
-            float yOffset = height;
-            for (Enum<?> enums : setting.getValue().getClass().getEnumConstants()) {
-                if (MathUtils.isHovered(x, y + yOffset, width, 14f, (float) mouseX, (float) mouseY)) {
-                    setting.setEnumValue(((Nameable) enums).getName());
-                    break;
+        // Стрелка (▾)
+        String arrow = open ? "▴" : "▾";
+        float  aw    = Fonts.REGULAR.getWidth(arrow, 7f);
+        Render2D.drawFont(ctx.getMatrices(), Fonts.REGULAR.getFont(7f), arrow,
+                x + width - aw - 6f, y + (height - Fonts.REGULAR.getHeight(7f)) / 2f,
+                new Color(themeText.getRed(), themeText.getGreen(), themeText.getBlue(),
+                        (int) (160 * ga)));
+
+        // ── Выпадающий список ────────────────────────────────────────────────
+        if (openAnim.getValue() > 0.01f) {
+            float listA = (float) Math.min(1f, openAnim.getValue() * ga);
+            float yOff  = height;
+            for (Enum<?> e : setting.getValue().getClass().getEnumConstants()) {
+                Animation pa = pickAnims.get(e);
+                pa.update(e == setting.getValue());
+                float pa2 = (float) pa.getValue();
+
+                // Фон выбранного
+                if (pa2 > 0.01f) {
+                    Render2D.drawRoundedRect(ctx.getMatrices(), x + 2f, y + yOff + 1f,
+                            width - 4f, 16f, 4f,
+                            new Color(accent.getRed(), accent.getGreen(), accent.getBlue(),
+                                    (int) (60 * pa2 * listA)));
                 }
-
-                yOffset += 14f;
+                // Текст пункта
+                Render2D.startScissor(ctx, x, y + yOff, width, 18f);
+                float slide = (1f - (float) openAnim.getValue()) * 6f;
+                Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7.5f),
+                        I18n.translate(((Nameable) e).getName()),
+                        x + 10f + slide, y + yOff + 4f,
+                        new Color(themeText.getRed(), themeText.getGreen(), themeText.getBlue(),
+                                (int) (themeText.getAlpha() * listA)));
+                Render2D.stopScissor(ctx);
+                yOff += 18f;
             }
         }
     }
 
     @Override
-    public void mouseReleased(double mouseX, double mouseY, int button) {
-
+    public void mouseClicked(double mx, double my, int btn) {
+        if (MathUtils.isHovered(x, y, width, height, (float) mx, (float) my)) {
+            if (btn == 0) { setting.increaseEnum(); return; }
+            if (btn == 1) { open = !open; return; }
+        }
+        if (open && btn == 0) {
+            float yOff = height;
+            for (Enum<?> e : setting.getValue().getClass().getEnumConstants()) {
+                if (MathUtils.isHovered(x, y + yOff, width, 18f, (float) mx, (float) my)) {
+                    setting.setEnumValue(((Nameable) e).getName()); break;
+                }
+                yOff += 18f;
+            }
+        }
     }
 
-    @Override
-    public void keyPressed(int keyCode, int scanCode, int modifiers) {
-
-    }
-
-    @Override
-    public void keyReleased(int keyCode, int scanCode, int modifiers) {
-
-    }
-
-    @Override
-    public void charTyped(char chr, int modifiers) {
-
-    }
+    @Override public void mouseReleased(double mx, double my, int btn) {}
+    @Override public void keyPressed(int k, int s, int m) {}
+    @Override public void keyReleased(int k, int s, int m) {}
+    @Override public void charTyped(char c, int m) {}
 }

@@ -5,7 +5,6 @@ import dev.simplevisuals.client.ui.clickgui.components.Component;
 import dev.simplevisuals.client.util.animations.Animation;
 import dev.simplevisuals.client.util.animations.Easing;
 import dev.simplevisuals.client.util.math.MathUtils;
-// removed unused ColorUtils import
 import dev.simplevisuals.client.util.renderer.fonts.Fonts;
 import dev.simplevisuals.client.util.renderer.Render2D;
 import net.minecraft.client.gui.DrawContext;
@@ -17,7 +16,8 @@ import dev.simplevisuals.client.managers.ThemeManager;
 public class BooleanComponent extends Component {
 
     private final BooleanSetting setting;
-    private final Animation toggleAnimation = new Animation(300, 1f, true, Easing.simplevisuals);
+    private final Animation toggleAnim = new Animation(200, 1f, false, Easing.BOTH_SINE);
+    private boolean animInit = false;
 
     public BooleanComponent(BooleanSetting setting) {
         super(setting.getName());
@@ -26,79 +26,65 @@ public class BooleanComponent extends Component {
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        toggleAnimation.update(setting.getValue());
-
+    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
         float ga = Math.max(0f, Math.min(1f, getGlobalAlpha()));
 
-        // Рендер текста
-        Render2D.drawFont(context.getMatrices(), Fonts.BOLD.getFont(7.5f),
-                I18n.translate(setting.getName()),
-                x + 4f, y + 3f,
-                new Color(
-                        ThemeManager.getInstance().getCurrentTheme().getTextColor().getRed(),
-                        ThemeManager.getInstance().getCurrentTheme().getTextColor().getGreen(),
-                        ThemeManager.getInstance().getCurrentTheme().getTextColor().getBlue(),
-                        (int) (ThemeManager.getInstance().getCurrentTheme().getTextColor().getAlpha() * ga)
-                ));
-
-        // Получаем цвета темы
-        Color accent = ThemeManager.getInstance().getCurrentTheme().getAccentColor();
-        // theme text color retrieved inline above; no separate local needed
-
-        float animValue = toggleAnimation.getValue();
-
-        float switchX = x + width - 14f;
-        float switchY = y + 3f;
-        float switchSize = 10f;
-
-        // Безопасное создание цветов
-        int alpha = Math.max(0, Math.min(255, (int) (255 * animValue * ga)));
-
-        // Фон переключателя всегда виден с минимальной непрозрачностью
-        int backgroundAlpha = (int) (255f * ga);
-
-        // Фон переключателя (всегда виден)
-        Render2D.drawRoundedRect(context.getMatrices(),
-                switchX - 2f, switchY - 2f, switchSize + 4f, switchSize + 4f, 2f,
-                new Color(67, 67, 67, backgroundAlpha));
-
-        // Иконка "D"
-        if (animValue > 0.1f) {
-            Render2D.drawFont(context.getMatrices(), Fonts.ICONS.getFont(switchSize),
-                    "D", switchX +1.7f, switchY,
-                    new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), alpha));
+        if (!animInit) {
+            toggleAnim.setDuration(0); toggleAnim.update(setting.getValue());
+            toggleAnim.setDuration(200); animInit = true;
+        } else {
+            toggleAnim.update(setting.getValue());
         }
+        float ta = (float) toggleAnim.getValue();
+
+        Color accent    = ThemeManager.getInstance().getCurrentTheme().getAccentColor();
+        Color themeText = ThemeManager.getInstance().getCurrentTheme().getTextColor();
+
+        // ── Фон строки ──────────────────────────────────────────────────────
+        Render2D.drawRoundedRect(ctx.getMatrices(), x, y, width, height, 5f,
+                new Color(255, 255, 255, (int) (8 * ga)));
+
+        // ── Текст ────────────────────────────────────────────────────────────
+        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7.5f),
+                I18n.translate(setting.getName()),
+                x + 6f, y + (height - Fonts.BOLD.getHeight(7.5f)) / 2f,
+                new Color(themeText.getRed(), themeText.getGreen(), themeText.getBlue(),
+                        (int) (themeText.getAlpha() * ga)));
+
+        // ── Toggle (справа) ───────────────────────────────────────────────────
+        float sw = 22f, sh = 11f;
+        float sx = x + width - sw - 6f;
+        float sy = y + (height - sh) / 2f;
+
+        // Трек (интерполяция цвета)
+        Color trackOff = new Color(40, 40, 55, (int) (180 * ga));
+        Color trackOn  = new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int) (210 * ga));
+        int r = (int) (trackOff.getRed()   + (trackOn.getRed()   - trackOff.getRed())   * ta);
+        int g = (int) (trackOff.getGreen() + (trackOn.getGreen() - trackOff.getGreen()) * ta);
+        int b = (int) (trackOff.getBlue()  + (trackOn.getBlue()  - trackOff.getBlue())  * ta);
+        int a = (int) (trackOff.getAlpha() + (trackOn.getAlpha() - trackOff.getAlpha()) * ta);
+        Render2D.drawRoundedRect(ctx.getMatrices(), sx, sy, sw, sh, sh / 2f, new Color(r, g, b, a));
+
+        // Ползунок
+        float pad = 2f;
+        float th  = sh - pad * 2;
+        float tx  = sx + pad + (sw - th - pad * 2) * ta;
+        Render2D.drawRoundedRect(ctx.getMatrices(), tx, sy + pad, th, th, th / 2f,
+                new Color(255, 255, 255, (int) (230 * ga)));
     }
 
     @Override
-    public void mouseClicked(double mouseX, double mouseY, int button) {
-        float switchX = x + width - 14f;
-        float switchY = y + 3.5f;
-        float switchSize = 10f;
-
-        if (MathUtils.isHovered(switchX - 2f, switchY - 2f, switchSize + 4f, switchSize + 4f, (float) mouseX, (float) mouseY) && button == 0) {
+    public void mouseClicked(double mx, double my, int btn) {
+        float sw = 22f, sh = 11f;
+        float sx = x + width - sw - 6f;
+        float sy = y + (height - sh) / 2f;
+        if (btn == 0 && MathUtils.isHovered(x, y, width, height, (float) mx, (float) my)) {
             setting.setValue(!setting.getValue());
         }
     }
 
-    @Override
-    public void mouseReleased(double mouseX, double mouseY, int button) {
-
-    }
-
-    @Override
-    public void keyPressed(int keyCode, int scanCode, int modifiers) {
-
-    }
-
-    @Override
-    public void keyReleased(int keyCode, int scanCode, int modifiers) {
-
-    }
-
-    @Override
-    public void charTyped(char chr, int modifiers) {
-
-    }
+    @Override public void mouseReleased(double mx, double my, int btn) {}
+    @Override public void keyPressed(int k, int s, int m) {}
+    @Override public void keyReleased(int k, int s, int m) {}
+    @Override public void charTyped(char c, int m) {}
 }

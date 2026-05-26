@@ -7,7 +7,6 @@ import dev.simplevisuals.client.util.animations.Easing;
 import dev.simplevisuals.client.util.math.MathUtils;
 import dev.simplevisuals.client.util.renderer.Render2D;
 import dev.simplevisuals.client.util.renderer.fonts.Fonts;
-import dev.simplevisuals.modules.settings.Setting;
 import dev.simplevisuals.modules.settings.impl.BooleanSetting;
 import dev.simplevisuals.modules.settings.impl.ListSetting;
 import lombok.Getter;
@@ -15,146 +14,124 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.resource.language.I18n;
 
 import java.awt.*;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class ListComponent extends Component {
 
     private final ListSetting setting;
-    private final Map<BooleanSetting, Animation> pickAnimations = new HashMap<>();
+    private final Map<BooleanSetting, Animation> pickAnims = new HashMap<>();
 
-    @Getter private final Animation openAnimation = new Animation(300, 1f, false, Easing.BOTH_SINE);
+    @Getter private final Animation openAnim = new Animation(250, 1f, false, Easing.BOTH_SINE);
     private boolean open;
 
     public ListComponent(ListSetting setting) {
         super(setting.getName());
         this.setting = setting;
-        for (BooleanSetting setting1 : setting.getValue()) pickAnimations.put(setting1, new Animation(300, 1f, false, Easing.BOTH_SINE));
-        this.visible = setting::isVisible;
-        this.addHeight = () -> openAnimation.getValue() > 0 ? (setting.getValue().size() * 14f) * (float) openAnimation.getValue() : 0f;
+        for (BooleanSetting bs : setting.getValue())
+            pickAnims.put(bs, new Animation(220, 1f, false, Easing.BOTH_SINE));
+        this.visible   = setting::isVisible;
+        this.addHeight = () -> openAnim.getValue() > 0
+                ? (setting.getValue().size() * 18f) * (float) openAnim.getValue()
+                : 0f;
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        openAnimation.update(open);
-
+    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
         float ga = Math.max(0f, Math.min(1f, getGlobalAlpha()));
+        openAnim.update(open);
 
-        Render2D.drawFont(context.getMatrices(),
-                Fonts.BOLD.getFont(7.5f),
+        Color themeText = ThemeManager.getInstance().getCurrentTheme().getTextColor();
+        Color accent    = ThemeManager.getInstance().getCurrentTheme().getAccentColor();
+
+        // ── Фон строки ──────────────────────────────────────────────────────
+        Render2D.drawRoundedRect(ctx.getMatrices(), x, y, width, height, 5f,
+                new Color(255, 255, 255, (int) (8 * ga)));
+
+        // ── Заголовок ────────────────────────────────────────────────────────
+        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7.5f),
                 I18n.translate(setting.getName()),
-                x + 5f,
-                y + 3.5f,
-                new Color(
-                        ThemeManager.getInstance().getCurrentTheme().getTextColor().getRed(),
-                        ThemeManager.getInstance().getCurrentTheme().getTextColor().getGreen(),
-                        ThemeManager.getInstance().getCurrentTheme().getTextColor().getBlue(),
-                        (int) (ThemeManager.getInstance().getCurrentTheme().getTextColor().getAlpha() * ga)
-                )
-        );
+                x + 6f, y + (height - Fonts.BOLD.getHeight(7.5f)) / 2f,
+                new Color(themeText.getRed(), themeText.getGreen(), themeText.getBlue(),
+                        (int) (themeText.getAlpha() * ga)));
 
-        Render2D.drawFont(context.getMatrices(),
-                Fonts.BOLD.getFont(7.5f),
-                "(" + setting.getToggled().size() + "/" + setting.getValue().size() + ")",
-                x + width - Fonts.REGULAR.getWidth("(" + setting.getToggled().size() + "/" + setting.getValue().size() + ")", 7.5f) - 5f,
-                y + 3.5f,
-                new Color(
-                        ThemeManager.getInstance().getCurrentTheme().getTextColor().getRed(),
-                        ThemeManager.getInstance().getCurrentTheme().getTextColor().getGreen(),
-                        ThemeManager.getInstance().getCurrentTheme().getTextColor().getBlue(),
-                        (int) (ThemeManager.getInstance().getCurrentTheme().getTextColor().getAlpha() * ga)
-                )
-        );
+        // Счётчик
+        String counter = "(" + setting.getToggled().size() + "/" + setting.getValue().size() + ")";
+        float  cw      = Fonts.REGULAR.getWidth(counter, 7f);
+        Render2D.drawFont(ctx.getMatrices(), Fonts.REGULAR.getFont(7f), counter,
+                x + width - cw - 6f, y + (height - Fonts.REGULAR.getHeight(7f)) / 2f,
+                new Color(120, 120, 140, (int) (200 * ga)));
 
-        if (openAnimation.getValue() > 0) {
-            float yOffset = height;
-            float a = (float) Math.max(0f, Math.min(1f, openAnimation.getValue()));
-            for (BooleanSetting setting : setting.getValue()) {
-                Animation anim = pickAnimations.get(setting);
-                anim.update(setting.getValue());
-                float textSlide = (1f - a) * 8f;
-                int itemAlpha = (int) (ThemeManager.getInstance().getCurrentTheme().getTextColor().getAlpha() * ga * a);
-                Render2D.drawFont(context.getMatrices(), Fonts.ICONS.getFont(10f), "D", x + width - 14f, y + yOffset + 3.5f,
-                        new Color(0, 0, 0, (int) (255 * anim.getValue() * ga * a)));
-                Render2D.drawFont(context.getMatrices(),
-                        Fonts.BOLD.getFont(7.5f),
-                        I18n.translate(setting.getName()),
-                        x + 6f + textSlide,
-                        y + yOffset + 3.5f,
-                        new Color(
-                                ThemeManager.getInstance().getCurrentTheme().getTextColor().getRed(),
-                                ThemeManager.getInstance().getCurrentTheme().getTextColor().getGreen(),
-                                ThemeManager.getInstance().getCurrentTheme().getTextColor().getBlue(),
-                                itemAlpha
-                        )
-                );
-                yOffset += 14f;
+        // ── Список элементов ─────────────────────────────────────────────────
+        if (openAnim.getValue() > 0.01f) {
+            float listA = (float) Math.min(1f, openAnim.getValue() * ga);
+            float yOff  = height;
+            for (BooleanSetting bs : setting.getValue()) {
+                Animation pa = pickAnims.get(bs);
+                pa.update(bs.getValue());
+                float pa2 = (float) pa.getValue();
+
+                if (pa2 > 0.01f) {
+                    Render2D.drawRoundedRect(ctx.getMatrices(), x + 2f, y + yOff + 1f,
+                            width - 4f, 16f, 4f,
+                            new Color(accent.getRed(), accent.getGreen(), accent.getBlue(),
+                                    (int) (55 * pa2 * listA)));
+                }
+
+                Render2D.startScissor(ctx, x, y + yOff, width, 18f);
+                float slide = (1f - (float) openAnim.getValue()) * 5f;
+                Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7.5f),
+                        I18n.translate(bs.getName()),
+                        x + 10f + slide, y + yOff + 4f,
+                        new Color(themeText.getRed(), themeText.getGreen(), themeText.getBlue(),
+                                (int) (themeText.getAlpha() * listA)));
+                Render2D.stopScissor(ctx);
+                yOff += 18f;
             }
         }
     }
 
     @Override
-    public void mouseClicked(double mouseX, double mouseY, int button) {
-        // Header interactions
-        if (MathUtils.isHovered(x, y, width, height, (float) mouseX, (float) mouseY)) {
-            if (button == 1) { // Right click: toggle open
-                open = !open;
-                return;
-            }
-            if (button == 0) { // Left click
+    public void mouseClicked(double mx, double my, int btn) {
+        if (MathUtils.isHovered(x, y, width, height, (float) mx, (float) my)) {
+            if (btn == 1) { open = !open; return; }
+            if (btn == 0) {
                 if (setting.isSingleSelect()) {
-                    // Cycle to next option
-                    List<BooleanSetting> opts = setting.getValue();
-                    int current = -1;
-                    for (int i = 0; i < opts.size(); i++) if (opts.get(i).getValue()) { current = i; break; }
-                    int next = (current + 1) % Math.max(1, opts.size());
-                    for (BooleanSetting bs : opts) bs.setValue(false);
+                    // Следующий вариант
+                    var opts = setting.getValue();
+                    int cur = -1;
+                    for (int i = 0; i < opts.size(); i++) if (opts.get(i).getValue()) { cur = i; break; }
+                    int next = (cur + 1) % Math.max(1, opts.size());
+                    for (BooleanSetting b : opts) b.setValue(false);
                     opts.get(next).setValue(true);
                 } else {
-                    open = !open; // Multi-select: toggle open
+                    open = !open;
                 }
                 return;
             }
         }
-        // Select item on left click when open
-        if (openAnimation.getValue() > 0 && button == 0) {
-            float yOffset = height;
-            float visibleH = (float) (setting.getValue().size() * 14f * Math.max(0f, Math.min(1f, openAnimation.getValue())));
-            for (BooleanSetting s : setting.getValue()) {
-                if (yOffset >= height + visibleH) break; // не кликаем по невидимой части во время анимации
-                if (MathUtils.isHovered(x, y + yOffset, width, 14f, (float) mouseX, (float) mouseY)) {
+        if (openAnim.getValue() > 0 && btn == 0) {
+            float yOff   = height;
+            float visH   = (float) (setting.getValue().size() * 18f
+                    * Math.max(0f, Math.min(1f, openAnim.getValue())));
+            for (BooleanSetting bs : setting.getValue()) {
+                if (yOff >= height + visH) break;
+                if (MathUtils.isHovered(x, y + yOff, width, 18f, (float) mx, (float) my)) {
                     if (setting.isSingleSelect()) {
                         for (BooleanSetting all : setting.getValue()) all.setValue(false);
-                        s.setValue(true);
+                        bs.setValue(true);
                     } else {
-                        s.setValue(!s.getValue());
+                        bs.setValue(!bs.getValue());
                     }
                     break;
                 }
-                yOffset += 14f;
+                yOff += 18f;
             }
         }
     }
 
-    @Override
-    public void mouseReleased(double mouseX, double mouseY, int button) {
-
-    }
-
-    @Override
-    public void keyPressed(int keyCode, int scanCode, int modifiers) {
-
-    }
-
-    @Override
-    public void keyReleased(int keyCode, int scanCode, int modifiers) {
-
-    }
-
-    @Override
-    public void charTyped(char chr, int modifiers) {
-
-    }
+    @Override public void mouseReleased(double mx, double my, int btn) {}
+    @Override public void keyPressed(int k, int s, int m) {}
+    @Override public void keyReleased(int k, int s, int m) {}
+    @Override public void charTyped(char c, int m) {}
 }

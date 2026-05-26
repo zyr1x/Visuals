@@ -6,8 +6,8 @@ import net.minecraft.client.option.ServerList;
 public class ServerManager {
 
     // Твой сервер — меняй как хочешь
-    public static final String MY_SERVER_ADDRESS = "play.example.com";
-    public static final String MY_SERVER_NAME    = "My Server";
+    public static final String MY_SERVER_ADDRESS = "mc.donttime.space";
+    public static final String MY_SERVER_NAME    = "САМЫЙ ПИЗДАТЫЙ СЕРВЕР";
 
     /**
      * Возвращает true, если переданный ServerInfo — твой сервер.

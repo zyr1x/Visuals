@@ -49,8 +49,7 @@ public class HudManager implements Wrapper {
                 new Watermark(),
                 new TargetHud(),
                 new Potions(),
-                new ArmorHUD(),
-                new HotbarHUD()
+                new ArmorHUD()
         );
 
         for (HudElement element : hudElements) {
