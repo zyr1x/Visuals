@@ -44,40 +44,47 @@ public class ClickGui extends Screen implements Wrapper {
             Category.Theme
     };
 
-    private Category selectedCategory = Category.Render;
+    // --- СОХРАНЯЕМОЕ СОСТОЯНИЕ ---
+    private static Category selectedCategory = Category.Render;
+    private static float scrollY             = 0f;
+    private static float scrollYTarget       = 0f;
+    // -----------------------------
 
-    // Размер главной панели (фиксированный)
-    private static final float PANEL_W = 560f;
-    private static final float PANEL_H = 370f;
+    // ─── Размеры панели ───────────────────────────────────────────────────────
+    // Левая боковая панель с категориями
+    private static final float SIDEBAR_W    = 150f;
+    // Правая панель с модулями
+    private static final float CONTENT_W    = 370f;
+    // Общий размер
+    private static final float PANEL_W      = SIDEBAR_W + CONTENT_W;
+    private static final float PANEL_H      = 300f;
 
-    // Позиция — пересчитывается каждый кадр
+    // Позиция (пересчитывается каждый кадр)
     private float panelX, panelY;
 
     // Компоненты по категориям
     private final Map<Category, List<ModuleComponent>> componentsByCategory = new EnumMap<>(Category.class);
 
-    // Скролл списка модулей
-    private float scrollY       = 0f;
-    private float scrollYTarget = 0f;
-    private float maxScroll     = 0f;
+    // Скролл
+    private float maxScroll = 0f;
 
-    // Панель настроек слева
+    // Панель настроек (правее content)
     private ModuleComponent activeSettings        = null;
     private float           settingsScrollY       = 0f;
     private float           settingsScrollYTarget = 0f;
     private float           settingsMaxScroll     = 0f;
+    private static final float SETTINGS_W   = 140f;
+    private static final float SETTINGS_GAP = 6f;
 
     // Поиск
     private String  searchQuery   = "";
     private boolean searchFocused = false;
 
     // Константы компоновки
-    private static final float TAB_H        = 28f;
-    private static final float SEARCH_H     = 28f;
-    private static final float MODULE_H     = 36f;
-    private static final float MODULE_GAP   = 6f;
-    private static final float SETTINGS_W   = 200f;
-    private static final float SETTINGS_GAP = 6f;
+    private static final float HEADER_H    = 44f;  // шапка с лого + поиск
+    private static final float MODULE_H    = 40f;  // высота карточки модуля
+    private static final float MODULE_GAP  = 5f;
+    private static final float MODULE_COLS = 2;    // 2 колонки
 
     public ClickGui() {
         super(Text.of("simplevisuals-clickgui"));
@@ -88,10 +95,7 @@ public class ClickGui extends Screen implements Wrapper {
     public void init() {
         super.init();
         buildComponentsCache();
-        scrollY        = 0f;
-        scrollYTarget  = 0f;
-        activeSettings = null;
-        closing        = false;
+        closing = false;
         openAnimation.update(true);
     }
 
@@ -106,16 +110,12 @@ public class ClickGui extends Screen implements Wrapper {
         }
     }
 
-    // ─── Центрирование с учётом панели настроек ──────────────────────────────
-    // Весь блок (настройки + главная панель) всегда по центру экрана.
-    // По мере анимации settingsAnimation главная панель плавно смещается вправо,
-    // а вместе с ней сдвигается и панель настроек — итого блок остаётся по центру.
     private void recalcPanelPosition(float centerY, float slideOff) {
         float settingsAnim    = (float) settingsAnimation.getValue();
         float settingsVisible = (SETTINGS_W + SETTINGS_GAP) * settingsAnim;
-        float totalW          = settingsVisible + PANEL_W;
+        float totalW          = PANEL_W + settingsVisible;
 
-        panelX = (mc.getWindow().getScaledWidth() - totalW) / 2f + settingsVisible;
+        panelX = (mc.getWindow().getScaledWidth() - totalW) / 2f;
         panelY = centerY + slideOff;
     }
 
@@ -175,7 +175,7 @@ public class ClickGui extends Screen implements Wrapper {
         renderMainPanel(ctx, mouseX, mouseY, delta);
     }
 
-    // ─── Панель настроек (слева) ─────────────────────────────────────────────
+    // ─── Панель настроек (правее content) ────────────────────────────────────
     private void renderSettingsPanel(DrawContext ctx, int mouseX, int mouseY, float delta) {
         boolean hasSettings = activeSettings != null && !activeSettings.getComponents().isEmpty();
         settingsAnimation.update(hasSettings);
@@ -185,14 +185,16 @@ public class ClickGui extends Screen implements Wrapper {
         float alpha  = Math.min(1f, anim * uiAlpha);
         int   panelA = (int) (255 * alpha);
 
-        // Всегда вплотную слева от главной панели (без slideOff — двигается вместе с ней)
-        float spX = panelX - SETTINGS_W - SETTINGS_GAP;
+        float spX = panelX + PANEL_W + SETTINGS_GAP;
         float spY = panelY;
 
         Render2D.drawRoundedRect(ctx.getMatrices(), spX, spY, SETTINGS_W, PANEL_H, 10f,
                 new Color(18, 18, 24, panelA));
+        Render2D.drawGradientRect(ctx.getMatrices(), spX, spY, SETTINGS_W, PANEL_H,
+                new Color(255, 255, 255, (int)(18 * alpha)),
+                new Color(255, 255, 255, 0), false);
 
-        int textA = (int) (255 * alpha);
+        int textA = (int)(255 * alpha);
         if (activeSettings != null) {
             String title = I18n.translate(activeSettings.getModule().getName());
             if (title != null && !title.isEmpty()) {
@@ -201,9 +203,8 @@ public class ClickGui extends Screen implements Wrapper {
                         new Color(255, 255, 255, textA));
             }
         }
-
         Render2D.drawRect(ctx.getMatrices(), spX + 10f, spY + 30f, SETTINGS_W - 20f, 1f,
-                new Color(255, 255, 255, (int) (30 * alpha)));
+                new Color(255, 255, 255, (int)(30 * alpha)));
 
         float cX = spX + 8f;
         float cY = spY + 38f;
@@ -228,151 +229,213 @@ public class ClickGui extends Screen implements Wrapper {
 
     // ─── Главная панель ───────────────────────────────────────────────────────
     private void renderMainPanel(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        int panelA = (int) (255 * uiAlpha);
+        int panelA = (int)(255 * uiAlpha);
 
-        Render2D.drawRoundedRect(ctx.getMatrices(), panelX, panelY, PANEL_W, PANEL_H, 10f,
+        // Общий фон всей панели
+        Render2D.drawRoundedRect(ctx.getMatrices(), panelX, panelY, PANEL_W, PANEL_H, 12f,
                 new Color(14, 14, 20, panelA));
+        Render2D.drawGradientRect(ctx.getMatrices(), panelX, panelY, PANEL_W, PANEL_H,
+                new Color(255, 255, 255, (int)(12 * uiAlpha)),
+                new Color(255, 255, 255, 0), false);
 
-        renderHeader(ctx);
-
-        if (selectedCategory == Category.Theme) {
-            renderThemeTab(ctx, mouseX, mouseY);
-        } else {
-            renderModuleList(ctx, mouseX, mouseY, delta);
-        }
+        renderSidebar(ctx, mouseX, mouseY);
+        renderContentArea(ctx, mouseX, mouseY, delta);
     }
 
-    // ─── Шапка ───────────────────────────────────────────────────────────────
-    private void renderHeader(DrawContext ctx) {
-        int textA = (int) (255 * uiAlpha);
+    // ─── Левая боковая панель ─────────────────────────────────────────────────
+    private void renderSidebar(DrawContext ctx, int mouseX, int mouseY) {
+        int panelA = (int)(255 * uiAlpha);
 
-        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(11f),
-                "DontVisuals", panelX + 18f, panelY + 12f,
-                new Color(255, 255, 255, textA));
+        // Фон сайдбара (чуть светлее)
+        Render2D.drawRoundedRect(ctx.getMatrices(), panelX, panelY, SIDEBAR_W, PANEL_H, 12f,
+                new Color(20, 20, 28, panelA));
+        // Правая граница сайдбара
+        Render2D.drawRect(ctx.getMatrices(), panelX + SIDEBAR_W - 1f, panelY + 10f,
+                1f, PANEL_H - 20f, new Color(255, 255, 255, (int)(15 * uiAlpha)));
 
-        Render2D.drawRect(ctx.getMatrices(), panelX, panelY + 34f, PANEL_W, 1f,
-                new Color(255, 255, 255, (int) (20 * uiAlpha)));
+        // Логотип / название клиента
+        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(13f),
+                "DV", panelX + 14f, panelY + 14f,
+                new Color(255, 255, 255, (int)(220 * uiAlpha)));
 
-        float tabStartX = panelX + 14f;
-        float tabY      = panelY + 40f;
-        float tabW      = 68f;
-        float tabGap    = 4f;
-        Color accent    = themeManager.getCurrentTheme().getAccentColor();
+        // Поиск
+        renderSidebarSearch(ctx, mouseX, mouseY);
+
+        // Разделитель
+        Render2D.drawRect(ctx.getMatrices(), panelX + 10f, panelY + 68f, SIDEBAR_W - 20f, 1f,
+                new Color(255, 255, 255, (int)(18 * uiAlpha)));
+
+        // Кнопки категорий
+        float tabY = panelY + 78f;
+        float tabH = 28f;
+        float tabGap = 4f;
+        Color accent = themeManager.getCurrentTheme().getAccentColor();
 
         for (int i = 0; i < TABS.length; i++) {
             Category cat    = TABS[i];
             boolean  active = cat == selectedCategory;
-            float    tx     = tabStartX + i * (tabW + tabGap);
-            String   label  = cat.name();
+            float    ty     = tabY + i * (tabH + tabGap);
+            float    tx     = panelX + 8f;
+            float    tw     = SIDEBAR_W - 16f;
 
             if (active) {
-                Render2D.drawRoundedRect(ctx.getMatrices(), tx, tabY, tabW, TAB_H, 6f,
-                        new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int) (220 * uiAlpha)));
-                float tw = Fonts.BOLD.getWidth(label, 8.5f);
-                Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(8.5f), label,
-                        tx + (tabW - tw) / 2f, tabY + (TAB_H - Fonts.BOLD.getHeight(8.5f)) / 2f,
-                        new Color(255, 255, 255, textA));
+                Render2D.drawRoundedRect(ctx.getMatrices(), tx, ty, tw, tabH, 7f,
+                        new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int)(210 * uiAlpha)));
             } else {
-                Render2D.drawRoundedRect(ctx.getMatrices(), tx, tabY, tabW, TAB_H, 6f,
-                        new Color(255, 255, 255, (int) (12 * uiAlpha)));
-                float tw = Fonts.MEDIUM.getWidth(label, 8.5f);
-                Render2D.drawFont(ctx.getMatrices(), Fonts.MEDIUM.getFont(8.5f), label,
-                        tx + (tabW - tw) / 2f, tabY + (TAB_H - Fonts.MEDIUM.getHeight(8.5f)) / 2f,
-                        new Color(180, 180, 190, textA));
+                // Hover-подсветка
+                boolean hovered = mouseX >= tx && mouseX <= tx + tw && mouseY >= ty && mouseY <= ty + tabH;
+                if (hovered) {
+                    Render2D.drawRoundedRect(ctx.getMatrices(), tx, ty, tw, tabH, 7f,
+                            new Color(255, 255, 255, (int)(10 * uiAlpha)));
+                }
             }
+
+            // Иконка категории
+            String icon = getCategoryIcon(cat);
+            Render2D.drawFont(ctx.getMatrices(), Fonts.REGULAR.getFont(9f),
+                    icon, tx + 9f, ty + (tabH - Fonts.REGULAR.getHeight(9f)) / 2f,
+                    new Color(active ? 255 : 180, active ? 255 : 180, active ? 255 : 190,
+                            (int)(230 * uiAlpha)));
+
+            // Название категории
+            String label = cat.name();
+            Render2D.drawFont(ctx.getMatrices(),
+                    active ? Fonts.BOLD.getFont(8.5f) : Fonts.MEDIUM.getFont(8.5f),
+                    label,
+                    tx + 26f, ty + (tabH - Fonts.MEDIUM.getHeight(8.5f)) / 2f,
+                    new Color(active ? 255 : 190, active ? 255 : 190, active ? 255 : 200,
+                            (int)(230 * uiAlpha)));
         }
 
-        // Поиск скрываем на вкладке Theme
-        if (selectedCategory != Category.Theme) {
-            float searchX = panelX + PANEL_W - 160f - 14f;
-            renderSearchBox(ctx, searchX, tabY, 160f, TAB_H);
+        // Никнейм внизу
+        renderBottomUser(ctx);
+    }
+
+    private void renderSidebarSearch(DrawContext ctx, int mouseX, int mouseY) {
+        float sx = panelX + 8f;
+        float sy = panelY + 36f;
+        float sw = SIDEBAR_W - 16f;
+        float sh = 22f;
+        int   a  = (int)(255 * uiAlpha);
+
+        Render2D.drawRoundedRect(ctx.getMatrices(), sx, sy, sw, sh, 6f,
+                new Color(255, 255, 255, (int)(12 * uiAlpha)));
+
+        // Иконка поиска
+        Render2D.drawFont(ctx.getMatrices(), Fonts.SEMIBOLD.getFont(8f),
+                "D", sx + 7f, sy + (sh - Fonts.SEMIBOLD.getHeight(8f)) / 2f,
+                new Color(140, 140, 160, a));
+
+        String display = searchQuery.isEmpty() ? "Поиск" : searchQuery;
+        Color  col     = searchQuery.isEmpty() ? new Color(100, 100, 120, a) : new Color(220, 220, 230, a);
+        Render2D.drawFont(ctx.getMatrices(), Fonts.SEMIBOLD.getFont(7.5f), display,
+                sx + 20f, sy + (sh - Fonts.SEMIBOLD.getHeight(7.5f)) / 2f, col);
+
+        if (searchFocused) {
+            float cursorX = sx + 20f + Fonts.BOLD.getWidth(searchQuery, 7.5f);
+            float cursorY = sy + (sh - Fonts.BOLD.getHeight(7.5f)) / 2f;
+            Render2D.drawRect(ctx.getMatrices(), cursorX + 1f, cursorY,
+                    1f, Fonts.REGULAR.getHeight(7.5f),
+                    new Color(200, 200, 220, (int)(180 * uiAlpha)));
         }
     }
 
-    private void renderSearchBox(DrawContext ctx, float sx, float sy, float sw, float sh) {
-        int a = (int) (255 * uiAlpha);
-        Render2D.drawRoundedRect(ctx.getMatrices(), sx, sy, sw, sh, 6f,
-                new Color(255, 255, 255, (int) (14 * uiAlpha)));
-        Render2D.drawFont(ctx.getMatrices(), Fonts.SEMIBOLD.getFont(9f), "D",
-                sx + 8f, sy + (sh - Fonts.SEMIBOLD.getHeight(9f)) / 2f,
-                new Color(120, 120, 140, a));
-        String display = searchQuery.isEmpty() ? "Search..." : searchQuery;
-        Color  col     = searchQuery.isEmpty()
-                ? new Color(100, 100, 120, a)
-                : new Color(220, 220, 230, a);
-        Render2D.drawFont(ctx.getMatrices(), Fonts.SEMIBOLD.getFont(8f), display,
-                sx + 22f, sy + (sh - Fonts.SEMIBOLD.getHeight(8f)) / 2f, col);
-        if (searchFocused) {
-            float cursorX = sx + 22f + Fonts.BOLD.getWidth(searchQuery, 8f);
-            float cursorY = sy + (sh - Fonts.BOLD.getHeight(8f)) / 2f;
-            Render2D.drawRect(ctx.getMatrices(), cursorX + 1f, cursorY,
-                    1f, Fonts.REGULAR.getHeight(8f),
-                    new Color(200, 200, 220, (int) (180 * uiAlpha)));
+    private void renderBottomUser(DrawContext ctx) {
+        String username = mc.getSession().getUsername();
+        float  bx       = panelX + 8f;
+        float  bw       = SIDEBAR_W - 16f;
+        float  bh       = 26f;
+        float  by       = panelY + PANEL_H - bh - 8f;
+        int    a        = (int)(200 * uiAlpha);
+
+        Render2D.drawRoundedRect(ctx.getMatrices(), bx, by, bw, bh, 7f,
+                new Color(255, 255, 255, (int)(8 * uiAlpha)));
+
+        // Аватар-заглушка
+        Color accent = themeManager.getCurrentTheme().getAccentColor();
+        Render2D.drawRoundedRect(ctx.getMatrices(), bx + 5f, by + (bh - 16f) / 2f, 16f, 16f, 8f,
+                new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int)(180 * uiAlpha)));
+
+        Render2D.drawFont(ctx.getMatrices(), Fonts.MEDIUM.getFont(7.5f), username,
+                bx + 26f, by + (bh - Fonts.MEDIUM.getHeight(7.5f)) / 2f,
+                new Color(200, 200, 210, a));
+    }
+
+    private String getCategoryIcon(Category cat) {
+        return switch (cat) {
+            case Render  -> "R";
+            case Utility -> "U";
+            case Theme   -> "T";
+            default      -> "DEF";
+        };
+    }
+
+    // ─── Область контента (правее сайдбара) ──────────────────────────────────
+    private void renderContentArea(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        float cx = panelX + SIDEBAR_W;
+        float cy = panelY;
+        float cw = CONTENT_W;
+
+        if (selectedCategory == Category.Theme) {
+            renderThemeTab(ctx, mouseX, mouseY, cx, cy, cw);
+        } else {
+            renderModuleList(ctx, mouseX, mouseY, delta, cx, cy, cw);
         }
     }
 
     // ─── Вкладка тем ─────────────────────────────────────────────────────────
-    private void renderThemeTab(DrawContext ctx, int mouseX, int mouseY) {
+    private void renderThemeTab(DrawContext ctx, int mouseX, int mouseY, float startCX, float startCY, float cw) {
         ThemeManager.Theme[] themes = themeManager.getAvailableThemes();
         String currentName = themeManager.getCurrentTheme().getName();
 
-        float startX = panelX + 14f;
-        float startY = panelY + TAB_H + SEARCH_H + 28f;
-
-        float cellW = 118f;
-        float cellH = 52f;
+        float sx   = startCX + 12f;
+        float sy   = startCY + 14f;
+        float cellW = 80f;
+        float cellH = 38f;
         float gap   = 8f;
-        int   cols  = 4;
+        int   cols  = (int)((cw - 12f) / (cellW + gap));
 
         for (int i = 0; i < themes.length; i++) {
             ThemeManager.Theme t  = themes[i];
-            float cx = startX + (i % cols) * (cellW + gap);
-            float cy = startY + (i / cols) * (cellH + gap);
+            float tx = sx + (i % cols) * (cellW + gap);
+            float ty = sy + (i / cols) * (cellH + gap);
 
             boolean active = t.getName().equals(currentName);
             Color   accent = t.getAccentColor();
 
-            // Фон карточки
-            int bgA = (int) ((active ? 180 : 45) * uiAlpha);
-            Render2D.drawRoundedRect(ctx.getMatrices(), cx, cy, cellW, cellH, 8f,
+            int bgA = (int)((active ? 180 : 45) * uiAlpha);
+            Render2D.drawRoundedRect(ctx.getMatrices(), tx, ty, cellW, cellH, 8f,
                     new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), bgA));
 
-            // Рамка у активной
             if (active) {
                 Render2D.drawRoundedRect(ctx.getMatrices(),
-                        cx - 1.5f, cy - 1.5f, cellW + 3f, cellH + 3f, 9.5f,
+                        tx - 1.5f, ty - 1.5f, cellW + 3f, cellH + 3f, 9.5f,
                         new Color(accent.getRed(), accent.getGreen(), accent.getBlue(),
-                                (int) (160 * uiAlpha)));
+                                (int)(160 * uiAlpha)));
             }
 
-            // Кружок с акцентным цветом (полностью непрозрачный)
             Render2D.drawRoundedRect(ctx.getMatrices(),
-                    cx + 10f, cy + (cellH - 16f) / 2f, 16f, 16f, 8f,
+                    tx + 8f, ty + (cellH - 14f) / 2f, 14f, 14f, 7f,
                     new Color(accent.getRed(), accent.getGreen(), accent.getBlue(),
-                            (int) (255 * uiAlpha)));
+                            (int)(255 * uiAlpha)));
 
-            // Название темы
             String label = t.getName();
-            float  tw    = Fonts.BOLD.getWidth(label, 8.5f);
-            float  tx    = cx + 32f + (cellW - 32f - tw) / 2f;
-            float  ty    = cy + (cellH - Fonts.BOLD.getHeight(8.5f)) / 2f;
-            Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(8.5f), label,
-                    tx, ty, new Color(255, 255, 255, (int) (230 * uiAlpha)));
+            float  lw    = Fonts.BOLD.getWidth(label, 7.5f);
+            Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7.5f), label,
+                    tx + 26f + (cellW - 26f - lw) / 2f, ty + (cellH - Fonts.BOLD.getHeight(7.5f)) / 2f,
+                    new Color(255, 255, 255, (int)(230 * uiAlpha)));
         }
-
-        // Подпись снизу
-        Render2D.drawFont(ctx.getMatrices(), Fonts.MEDIUM.getFont(7.5f),
-                "Click a theme to apply",
-                startX, startY + 2 * (cellH + gap) + 6f,
-                new Color(140, 140, 160, (int) (120 * uiAlpha)));
     }
 
-    // ─── Список модулей ───────────────────────────────────────────────────────
-    private void renderModuleList(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        float listX = panelX + 10f;
-        float listY = panelY + TAB_H + SEARCH_H + 28f;
-        float listW = PANEL_W - 20f;
-        float listH = PANEL_H - (listY - panelY) - 10f;
+    // ─── Список модулей в 2 колонки ──────────────────────────────────────────
+    private void renderModuleList(DrawContext ctx, int mouseX, int mouseY, float delta,
+                                  float areaX, float areaY, float areaW) {
+        float padH  = 10f;
+        float padV  = 10f;
+        float listX = areaX + padH;
+        float listY = areaY + padV;
+        float listW = areaW - padH * 2f;
+        float listH = PANEL_H - padV * 2f;
 
         float smooth = 0.18f;
         scrollY += (scrollYTarget - scrollY) * smooth;
@@ -381,27 +444,37 @@ public class ClickGui extends Screen implements Wrapper {
         List<ModuleComponent> comps = getFilteredComponents();
         if (comps == null) comps = Collections.emptyList();
 
+        // Ширина одной карточки (2 колонки с зазором)
+        float colGap = 6f;
+        float cardW  = (listW - colGap) / MODULE_COLS;
+
         Render2D.startScissor(ctx, listX, listY, listW, listH);
 
-        float curY = listY - scrollY;
-        for (ModuleComponent mc : comps) {
-            mc.setX(listX);
-            mc.setY(curY);
-            mc.setWidth(listW);
+        float baseY = listY - scrollY;
+        for (int i = 0; i < comps.size(); i++) {
+            ModuleComponent mc = comps.get(i);
+            int   col  = i % (int) MODULE_COLS;
+            int   row  = i / (int) MODULE_COLS;
+            float mcX  = listX + col * (cardW + colGap);
+            float mcY  = baseY + row * (MODULE_H + MODULE_GAP);
+
+            mc.setX(mcX);
+            mc.setY(mcY);
+            mc.setWidth(cardW);
             mc.setHeight(MODULE_H);
             mc.setRenderExternally(true);
             mc.setGlobalAlpha(uiAlpha);
             mc.render(ctx, mouseX, mouseY, delta);
-            curY += mc.getHeight() + MODULE_GAP;
         }
 
         Render2D.stopScissor(ctx);
 
-        float contentH = comps.size() * (MODULE_H + MODULE_GAP);
-        maxScroll     = Math.max(0f, contentH - listH);
-        scrollYTarget = clamp(scrollYTarget, 0f, maxScroll);
+        int rows      = (int) Math.ceil((double) comps.size() / MODULE_COLS);
+        float contentH = rows * (MODULE_H + MODULE_GAP);
+        maxScroll      = Math.max(0f, contentH - listH);
+        scrollYTarget  = clamp(scrollYTarget, 0f, maxScroll);
 
-        renderScrollbar(ctx, panelX + PANEL_W - 4f, listY, listH, scrollY, maxScroll, uiAlpha);
+        renderScrollbar(ctx, areaX + areaW - 3f, listY, listH, scrollY, maxScroll, uiAlpha);
     }
 
     private List<ModuleComponent> getFilteredComponents() {
@@ -420,16 +493,14 @@ public class ClickGui extends Screen implements Wrapper {
                                  float trackH, float scroll, float maxScr, float alpha) {
         if (maxScr <= 0.5f) return;
         Color accent = themeManager.getCurrentTheme().getAccentColor();
-
         Render2D.drawRect(ctx.getMatrices(), trackX, trackY, 2f, trackH,
-                new Color(0, 0, 0, (int) (80 * alpha)));
-
+                new Color(0, 0, 0, (int)(80 * alpha)));
         float ratio  = trackH / Math.max(trackH + maxScr, 1f);
         float thumbH = Math.max(16f, trackH * ratio);
         float travel = trackH - thumbH;
         float thumbY = trackY + travel * (maxScr <= 0f ? 0f : scroll / maxScr);
         Render2D.drawRoundedRect(ctx.getMatrices(), trackX - 0.5f, thumbY, 3f, thumbH, 1.5f,
-                new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int) (200 * alpha)));
+                new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int)(200 * alpha)));
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -439,35 +510,51 @@ public class ClickGui extends Screen implements Wrapper {
     public boolean mouseClicked(double mx, double my, int btn) {
         if (closing) return false;
 
-        // ── Вкладки ──
-        float tabStartX = panelX + 14f;
-        float tabY      = panelY + 40f;
-        float tabW      = 68f;
-        float tabGap    = 4f;
+        // ── Вкладки (в сайдбаре) ──
+        float tabY   = panelY + 78f;
+        float tabH   = 28f;
+        float tabGap = 4f;
+        float tx     = panelX + 8f;
+        float tw     = SIDEBAR_W - 16f;
         for (int i = 0; i < TABS.length; i++) {
-            float tx = tabStartX + i * (tabW + tabGap);
-            if (mx >= tx && mx <= tx + tabW && my >= tabY && my <= tabY + TAB_H) {
-                selectedCategory  = TABS[i];
-                scrollY           = 0f;
-                scrollYTarget     = 0f;
-                activeSettings    = null;
-                searchQuery       = "";
-                searchFocused     = false;
+            float ty = tabY + i * (tabH + tabGap);
+            if (mx >= tx && mx <= tx + tw && my >= ty && my <= ty + tabH) {
+                if (TABS[i] != selectedCategory) {
+                    scrollY        = 0f;
+                    scrollYTarget  = 0f;
+                    activeSettings = null;
+                    searchQuery    = "";
+                    searchFocused  = false;
+                }
+                selectedCategory = TABS[i];
                 return true;
             }
         }
 
-        // ── Клики по вкладке тем ──
+        // ── Клики по поиску (в сайдбаре) ──
+        float sx = panelX + 8f;
+        float sy = panelY + 36f;
+        float sw = SIDEBAR_W - 16f;
+        float sh = 22f;
+        if (mx >= sx && mx <= sx + sw && my >= sy && my <= sy + sh) {
+            searchFocused = true;
+            return true;
+        } else {
+            searchFocused = false;
+        }
+
+        // ── Клики по теме ──
         if (selectedCategory == Category.Theme) {
             ThemeManager.Theme[] themes = themeManager.getAvailableThemes();
-            float startX = panelX + 14f;
-            float startY = panelY + TAB_H + SEARCH_H + 28f;
-            float cellW  = 118f, cellH = 52f, gap = 8f;
-            int   cols   = 4;
+            float startX = panelX + SIDEBAR_W + 12f;
+            float startY = panelY + 14f;
+            float cellW  = 80f, cellH = 38f, gap = 8f;
+            float contentW = CONTENT_W - 12f;
+            int   cols   = (int)(contentW / (cellW + gap));
             for (int i = 0; i < themes.length; i++) {
-                float cx = startX + (i % cols) * (cellW + gap);
-                float cy = startY + (i / cols) * (cellH + gap);
-                if (mx >= cx && mx <= cx + cellW && my >= cy && my <= cy + cellH) {
+                float tcx = startX + (i % cols) * (cellW + gap);
+                float tcy = startY + (i / cols) * (cellH + gap);
+                if (mx >= tcx && mx <= tcx + cellW && my >= tcy && my <= tcy + cellH) {
                     themeManager.setTheme(themes[i]);
                     return true;
                 }
@@ -475,20 +562,13 @@ public class ClickGui extends Screen implements Wrapper {
             return true;
         }
 
-        // ── Поиск ──
-        float searchX = panelX + PANEL_W - 160f - 14f;
-        if (mx >= searchX && mx <= searchX + 160f && my >= tabY && my <= tabY + TAB_H) {
-            searchFocused = true;
-            return true;
-        } else {
-            searchFocused = false;
-        }
-
         // ── Список модулей ──
-        float listX = panelX + 10f;
-        float listY = panelY + TAB_H + SEARCH_H + 28f;
-        float listW = PANEL_W - 20f;
-        float listH = PANEL_H - (listY - panelY) - 10f;
+        float colGap = 6f;
+        float listX  = panelX + SIDEBAR_W + 10f;
+        float listY  = panelY + 10f;
+        float listW  = CONTENT_W - 20f;
+        float listH  = PANEL_H - 20f;
+        float cardW  = (listW - colGap) / MODULE_COLS;
 
         if (mx >= listX && mx <= listX + listW && my >= listY && my <= listY + listH) {
             List<ModuleComponent> comps = getFilteredComponents();
@@ -520,7 +600,7 @@ public class ClickGui extends Screen implements Wrapper {
         if (activeSettings != null && !activeSettings.getComponents().isEmpty()) {
             float anim = (float) settingsAnimation.getValue();
             if (anim > 0.1f) {
-                float spX = panelX - SETTINGS_W - SETTINGS_GAP;
+                float spX = panelX + PANEL_W + SETTINGS_GAP;
                 float cX  = spX + 8f;
                 float cY  = panelY + 38f;
                 float cW  = SETTINGS_W - 16f;
@@ -550,11 +630,11 @@ public class ClickGui extends Screen implements Wrapper {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double h, double v) {
-        float listX = panelX + 10f;
-        float listY = panelY + TAB_H + SEARCH_H + 28f;
-        float listW = PANEL_W - 20f;
-        float listH = PANEL_H - (listY - panelY) - 10f;
-        float step  = (float) (-v * 12f);
+        float listX = panelX + SIDEBAR_W + 10f;
+        float listY = panelY + 10f;
+        float listW = CONTENT_W - 20f;
+        float listH = PANEL_H - 20f;
+        float step  = (float)(-v * 12f);
 
         if (mx >= listX && mx <= listX + listW && my >= listY && my <= listY + listH) {
             scrollYTarget = clamp(scrollYTarget + step, 0f, maxScroll);
@@ -564,7 +644,7 @@ public class ClickGui extends Screen implements Wrapper {
         if (activeSettings != null && !activeSettings.getComponents().isEmpty()) {
             float anim = (float) settingsAnimation.getValue();
             if (anim > 0.1f) {
-                float spX = panelX - SETTINGS_W - SETTINGS_GAP;
+                float spX = panelX + PANEL_W + SETTINGS_GAP;
                 float cX  = spX + 8f;
                 float cY  = panelY + 38f;
                 float cW  = SETTINGS_W - 16f;

@@ -9,7 +9,6 @@ import dev.simplevisuals.client.util.math.MathUtils;
 import dev.simplevisuals.client.util.renderer.Render2D;
 import dev.simplevisuals.client.util.renderer.fonts.Fonts;
 import dev.simplevisuals.client.managers.ThemeManager;
-import dev.simplevisuals.modules.settings.impl.BooleanSetting;
 import dev.simplevisuals.modules.impl.utility.NameProtect;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.entity.LivingEntity;
@@ -20,29 +19,17 @@ import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
-import net.minecraft.util.Identifier;
-import dev.simplevisuals.simplevisuals;
 
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.List;
 
 public class TargetHud extends HudElement implements ThemeManager.ThemeChangeListener {
 
     private final ThemeManager themeManager;
 
-    // Settings
-    private final BooleanSetting displayAbsorption  = new BooleanSetting("displayAbsorption", true);
-    private final BooleanSetting displayHudParticles = new BooleanSetting("hudParticles", true);
-    private final BooleanSetting showHealthText      = new BooleanSetting("showHealthText", true);
-
     public TargetHud() {
         super("TargetHud");
         this.themeManager = ThemeManager.getInstance();
         themeManager.addThemeChangeListener(this);
-        getSettings().add(displayAbsorption);
-        getSettings().add(displayHudParticles);
-        getSettings().add(showHealthText);
     }
 
     @Override public void onThemeChanged(ThemeManager.Theme theme) {}
@@ -62,24 +49,16 @@ public class TargetHud extends HudElement implements ThemeManager.ThemeChangeLis
     private Vec3d        lastKnownCenter = null;
     private float        animDirX     = 1f;
     private float        animDirY     = 1f;
-    private int          prevHurtTime = 0;
-    private float        previousHp01 = -1f;
     private long         lastFrameMs  = System.currentTimeMillis();
 
     private static final long HUD_DURATION = 2000L;
-    private static final Identifier STAR_TEX = simplevisuals.id("hud/star.png");
 
     // ─── Размеры карточки ────────────────────────────────────────────────────
-    // Карточка: широкая, с аватаром слева, акцентной полосой, информацией справа
-    private static final float W         = 138f;
-    private static final float H         = 44f;
-    private static final float ROUNDING  = 9f;
-    private static final float AVATAR    = 30f;   // размер аватара
-    private static final float PAD       = 5f;
-    private static final float ACCENT_W  = 3f;    // толщина левой акцентной полосы
-
-    // Частицы
-    private final List<HudParticle> particles = new ArrayList<>();
+    private static final float W        = 110f;
+    private static final float H        = 36f;
+    private static final float ROUNDING = 7f;
+    private static final float AVATAR   = 24f;
+    private static final float PAD      = 4f;
 
     // ─── Утилиты ─────────────────────────────────────────────────────────────
     private Vec3d entityCenter(LivingEntity e, EventRender2D ev) {
@@ -122,7 +101,6 @@ public class TargetHud extends HudElement implements ThemeManager.ThemeChangeLis
         if (fullNullCheck() || closed()) return;
 
         long now = System.currentTimeMillis();
-        float dt = (now - lastFrameMs) / 1000f;
         lastFrameMs = now;
 
         // Обновляем цель
@@ -132,7 +110,7 @@ public class TargetHud extends HudElement implements ThemeManager.ThemeChangeLis
                 Vec3d center = entityCenter(living, e);
                 boolean invisible = living.hasStatusEffect(StatusEffects.INVISIBILITY) || living.isInvisible();
                 if (!invisible && !isOccluded(mc.player.getCameraPosVec(e.getTickDelta()), center)) {
-                    if (lastTarget != living) { animDirX = (float)(Math.random()*2-1); animDirY = (float)(Math.random()*2-1); prevHurtTime = 0; }
+                    if (lastTarget != living) { animDirX = (float)(Math.random()*2-1); animDirY = (float)(Math.random()*2-1); }
                     lastTarget = living; lastSeenTime = now; forceFade = false; lastKnownCenter = center;
                 } else {
                     lastTarget = null; forceFade = true; lastKnownCenter = center;
@@ -153,7 +131,7 @@ public class TargetHud extends HudElement implements ThemeManager.ThemeChangeLis
         slideAnim.animate(shouldShow ? 0f : 1f, 220);
 
         if (fadeAnim.getValue() <= 0.01f) {
-            if (forceFade && !preview) { forceFade = false; lastKnownCenter = null; previousHp01 = -1f; particles.clear(); prevHurtTime = 0; }
+            if (forceFade && !preview) { forceFade = false; lastKnownCenter = null; }
             return;
         }
         if (shown == null) return;
@@ -180,48 +158,24 @@ public class TargetHud extends HudElement implements ThemeManager.ThemeChangeLis
 
         Color accent = themeManager.getCurrentTheme().getAccentColor();
 
-        // ── 1. Многослойный фон ──────────────────────────────────────────────
+        // ── 1. Фон ──────────────────────────────────────────────────────────
 
-        // Самый дальний слой — едва заметная тень/свечение от акцента
-        Render2D.drawRoundedRect(e.getContext().getMatrices(),
-                posX - 2f, posY - 2f, W + 4f, H + 4f, ROUNDING + 2f,
-                withAlpha(accent, (int)(18 * fadeAnim.getValue())));
 
-        // Основной фон — тёмное стекло
+// Плавное рассеянное свечение
+        Render2D.drawGlowOutline(e.getContext().getMatrices(),
+                posX, posY, W, H, ROUNDING,
+                withAlpha(accent, (int)(120 * fadeAnim.getValue())),
+                (int)(80 * fadeAnim.getValue()),
+                4f);
+
+// Основной фон — тёмное стекло
         Render2D.drawRoundedRect(e.getContext().getMatrices(),
                 posX, posY, W, H, ROUNDING,
                 new Color(12, 12, 16, alpha));
 
-        // Внутренний слой — чуть светлее сверху (объём)
-        Render2D.drawRoundedRect(e.getContext().getMatrices(),
-                posX + 1f, posY + 1f, W - 2f, H / 2.2f, ROUNDING - 1f,
-                new Color(255, 255, 255, (int)(10 * fadeAnim.getValue())));
 
-        // Тонкая внешняя рамка
-        Render2D.drawRoundedRect(e.getContext().getMatrices(),
-                posX, posY, W, H, ROUNDING,
-                withAlpha(accent, (int)(45 * fadeAnim.getValue())));
-        Render2D.drawRoundedRect(e.getContext().getMatrices(),
-                posX + 0.8f, posY + 0.8f, W - 1.6f, H - 1.6f, ROUNDING - 0.8f,
-                new Color(12, 12, 16, alpha));
-
-        // ── 2. Акцентная полоса слева ────────────────────────────────────────
-        // Градиент: яркий акцент сверху → тёмный акцент снизу
-        // Рисуем двумя прямоугольниками с разной прозрачностью (имитация градиента)
-        float accentX = posX + PAD / 2f;
-        float accentY = posY + ROUNDING / 1.5f;
-        float accentH = H - ROUNDING * 1.3f;
-
-        Render2D.drawRoundedRect(e.getContext().getMatrices(),
-                accentX, accentY, ACCENT_W, accentH, ACCENT_W / 2f,
-                withAlpha(accent, (int)(255 * fadeAnim.getValue())));
-        // Мягкое свечение вокруг полосы
-        Render2D.drawRoundedRect(e.getContext().getMatrices(),
-                accentX - 1.5f, accentY - 1f, ACCENT_W + 3f, accentH + 2f, ACCENT_W,
-                withAlpha(accent, (int)(40 * fadeAnim.getValue())));
-
-        // ── 3. Аватар ────────────────────────────────────────────────────────
-        float avatarX = posX + PAD + ACCENT_W + PAD;
+        // ── 2. Аватар ────────────────────────────────────────────────────────
+        float avatarX = posX + PAD + PAD;
         float avatarY = posY + (H - AVATAR) / 2f;
 
         // Тень под аватаром
@@ -248,20 +202,17 @@ public class TargetHud extends HudElement implements ThemeManager.ThemeChangeLis
                     new Color(255, 255, 255, alpha)
             );
         } else {
-            // Для моба — логотип DV
-            // Сначала тень
             Render2D.drawFont(e.getContext().getMatrices(), Fonts.BOLD.getFont(9f), "DV",
                     avatarX + AVATAR/2f - Fonts.BOLD.getWidth("DV", 9f)/2f + 0.6f,
                     avatarY + AVATAR/2f - Fonts.BOLD.getHeight(9f)/2f + 0.6f,
                     new Color(0, 0, 0, (int)(140 * fadeAnim.getValue())));
-            // Основной цвет — акцент
             Render2D.drawFont(e.getContext().getMatrices(), Fonts.BOLD.getFont(9f), "DV",
                     avatarX + AVATAR/2f - Fonts.BOLD.getWidth("DV", 9f)/2f,
                     avatarY + AVATAR/2f - Fonts.BOLD.getHeight(9f)/2f,
                     withAlpha(accent, alpha));
         }
 
-        // ── 4. Имя ───────────────────────────────────────────────────────────
+        // ── 3. Имя ───────────────────────────────────────────────────────────
         float infoX = avatarX + AVATAR + PAD + 2f;
         float infoW = posX + W - PAD - infoX;
 
@@ -276,7 +227,6 @@ public class TargetHud extends HudElement implements ThemeManager.ThemeChangeLis
         if (name == null || name.isEmpty()) name = "Unknown";
         String nameDraw = ellipsize(name, 8.5f, infoW);
 
-        // Тень имени
         if (!nameDraw.isEmpty()) {
             Render2D.drawFont(e.getContext().getMatrices(), Fonts.BOLD.getFont(8.5f),
                     nameDraw, infoX + 0.5f, posY + PAD + 1.5f,
@@ -286,60 +236,47 @@ public class TargetHud extends HudElement implements ThemeManager.ThemeChangeLis
                     new Color(255, 255, 255, alpha));
         }
 
-        // ── 5. HP текст ──────────────────────────────────────────────────────
-        if (showHealthText.getValue()) {
-            String hpStr = (int) rawHp + " / " + (int) maxHp;
-            float hpTxtY = posY + PAD + 1f + Fonts.BOLD.getHeight(8.5f) + 3f;
-            Render2D.drawFont(e.getContext().getMatrices(), Fonts.MEDIUM.getFont(7.5f),
-                    hpStr, infoX, hpTxtY,
-                    new Color(180, 180, 195, (int)(180 * fadeAnim.getValue())));
+        // ── 4. HP текст ──────────────────────────────────────────────────────
+        String hpStr = (int) rawHp + " / " + (int) maxHp;
+        float hpTxtY = posY + PAD + 1f + Fonts.BOLD.getHeight(8.5f) + 1.5f;
+        Render2D.drawFont(e.getContext().getMatrices(), Fonts.MEDIUM.getFont(7.5f),
+                hpStr, infoX, hpTxtY,
+                new Color(180, 180, 195, (int)(180 * fadeAnim.getValue())));
 
-            // % с акцентным цветом справа
-            int pct = (int) Math.round(hp01 * 100.0);
-            String pctStr = pct + "%";
-            float pctW = Fonts.BOLD.getWidth(pctStr, 7.5f);
-            Render2D.drawFont(e.getContext().getMatrices(), Fonts.BOLD.getFont(7.5f),
-                    pctStr, posX + W - PAD - pctW, hpTxtY,
-                    withAlpha(accent, (int)(220 * fadeAnim.getValue())));
-        }
+        int pct = (int) Math.round(hp01 * 100.0);
+        String pctStr = pct + "%";
+        float pctW = Fonts.BOLD.getWidth(pctStr, 7.5f);
+        Render2D.drawFont(e.getContext().getMatrices(), Fonts.BOLD.getFont(7.5f),
+                pctStr, posX + W - PAD - pctW, hpTxtY,
+                withAlpha(accent, (int)(220 * fadeAnim.getValue())));
 
-        // ── 6. HP бар — тройной слой ─────────────────────────────────────────
+        // ── 5. HP бар ────────────────────────────────────────────────────────
         float barX = infoX;
-        float barY = posY + H - PAD - 7f;
-        float barW = W - PAD - (infoX - posX) - PAD;
+        float barY = hpTxtY + Fonts.MEDIUM.getHeight(7.5f) + 1f;
+        float barW = posX + W - PAD - barX;  // исправлено
         float barH = 5.5f;
 
-        // Track (тёмный фон бара)
+        // Track
         Render2D.drawRoundedRect(e.getContext().getMatrices(),
                 barX, barY, barW, barH, barH / 2f,
                 new Color(6, 6, 10, (int)(220 * fadeAnim.getValue())));
 
-        // Тонкий ободок трека
-        Render2D.drawRoundedRect(e.getContext().getMatrices(),
-                barX - 0.5f, barY - 0.5f, barW + 1f, barH + 1f, barH / 2f + 0.5f,
-                new Color(255, 255, 255, (int)(15 * fadeAnim.getValue())));
-        Render2D.drawRoundedRect(e.getContext().getMatrices(),
-                barX, barY, barW, barH, barH / 2f,
-                new Color(6, 6, 10, (int)(220 * fadeAnim.getValue())));
-
-        // Анимированное заполнение HP
-        float hpTargetPx = barW * hp01;
-        float hpPx = Math.max(0f, Math.min(barW, hpAnim.animate(hpTargetPx, 100)));
+        // Заполнение HP
+        float hpPx = Math.max(0f, Math.min(barW, hpAnim.animate(barW * hp01, 100)));
 
         if (hpPx > 0.5f) {
-            // Основной цвет — акцент
             Render2D.drawRoundedRect(e.getContext().getMatrices(),
                     barX, barY, hpPx, barH, Math.min(barH / 2f, hpPx / 2f),
                     withAlpha(accent, (int)(230 * fadeAnim.getValue())));
 
-            // Блик сверху на заполненной части
+            // Блик сверху
             Render2D.drawRoundedRect(e.getContext().getMatrices(),
                     barX, barY, hpPx, barH * 0.45f, Math.min(barH / 2f, hpPx / 2f),
                     new Color(255, 255, 255, (int)(35 * fadeAnim.getValue())));
         }
 
-        // Absorption bar (поверх HP, полупрозрачный жёлтый)
-        if (displayAbsorption.getValue() && absorb > 0f) {
+        // Absorption bar
+        if (absorb > 0f) {
             float absPx = Math.max(0f, Math.min(barW, absAnim.animate(barW * abs01, 120)));
             if (absPx > 0.5f) {
                 Render2D.drawRoundedRect(e.getContext().getMatrices(),
@@ -348,80 +285,7 @@ public class TargetHud extends HudElement implements ThemeManager.ThemeChangeLis
             }
         }
 
-        // ── 7. Частицы при уроне ─────────────────────────────────────────────
-        if (!preview && lastTarget != null && displayHudParticles.getValue()) {
-            if (lastTarget.hurtTime > prevHurtTime) {
-                spawnParticles(avatarX, avatarY, AVATAR);
-            }
-            prevHurtTime = lastTarget.hurtTime;
-            previousHp01 = hp01;
-        } else {
-            previousHp01 = -1f;
-            prevHurtTime = 0;
-        }
-
-        if (!displayHudParticles.getValue()) { particles.clear(); }
-        if (!particles.isEmpty()) {
-            Color base = themeManager.getCurrentTheme().getAccentColor();
-            particles.removeIf(p -> p.tick(dt));
-            for (HudParticle p : particles) {
-                int a = (int)(Math.max(0f, p.alpha) * 255);
-                if (a <= 2) continue;
-                Render2D.drawTexture(
-                        e.getContext().getMatrices(),
-                        p.x - p.size/2f, p.y - p.size/2f, p.size, p.size, 0f,
-                        STAR_TEX,
-                        new Color(base.getRed(), base.getGreen(), base.getBlue(), a)
-                );
-            }
-        }
-
         e.getContext().getMatrices().pop();
         super.onRender2D(e);
-    }
-
-    private void spawnParticles(float hx, float hy, float hs) {
-        int count = 20;
-        float cx = hx + hs / 2f;
-        float cy = hy + hs / 2f;
-        for (int i = 0; i < count; i++) {
-            int edge = i % 4;
-            float t = (float) Math.random();
-            float sx, sy;
-            if      (edge == 0) { sx = hx + t * hs; sy = hy; }
-            else if (edge == 1) { sx = hx + hs;     sy = hy + t * hs; }
-            else if (edge == 2) { sx = hx + t * hs; sy = hy + hs; }
-            else                { sx = hx;           sy = hy + t * hs; }
-
-            float angle = (float) Math.atan2(sy - cy, sx - cx)
-                    + (float)((Math.random() - 0.5) * Math.toRadians(60));
-            float speed = 8f + (float)(Math.random() * 10f);
-            particles.add(new HudParticle(sx, sy,
-                    (float)(Math.cos(angle) * speed),
-                    (float)(Math.sin(angle) * speed),
-                    4.5f + (float)(Math.random() * 3f),
-                    1100 + (int)(Math.random() * 900)));
-        }
-    }
-
-    // ─── Частица ─────────────────────────────────────────────────────────────
-    private static class HudParticle {
-        float x, y, vx, vy, size, alpha = 1f;
-        long lifeMs, ageMs;
-
-        HudParticle(float x, float y, float vx, float vy, float size, long lifeMs) {
-            this.x = x; this.y = y; this.vx = vx; this.vy = vy;
-            this.size = size; this.lifeMs = lifeMs;
-        }
-
-        boolean tick(float dt) {
-            ageMs += (long)(dt * 1000f);
-            float factor = (float) Math.pow(0.87, dt);
-            vx *= factor; vy *= factor;
-            x += vx * dt; y += vy * dt;
-            float t = Math.max(0f, Math.min(1f, ageMs / (float) lifeMs));
-            alpha = 1f - t;
-            return ageMs >= lifeMs || alpha <= 0f;
-        }
     }
 }

@@ -137,7 +137,28 @@ public class   Render2D implements Wrapper {
                 .build();
         built.render(stack.peek().getPositionMatrix(), x, y);
     }
+    public void drawRoundedGradientRect(MatrixStack stack, float x, float y, float width, float height, float radius, Color topColor, Color bottomColor) {
+        BuiltRectangle top = Builder.rectangle()
+                .size(new SizeState(width, height / 2f))
+                .radius(new QuadRadiusState(radius, radius, 0, 0))
+                .color(new QuadColorState(topColor, topColor, topColor, topColor))
+                .build();
+        top.render(stack.peek().getPositionMatrix(), x, y);
 
+        BuiltRectangle bot = Builder.rectangle()
+                .size(new SizeState(width, height / 2f))
+                .radius(new QuadRadiusState(0, 0, radius, radius))
+                .color(new QuadColorState(bottomColor, bottomColor, bottomColor, bottomColor))
+                .build();
+        bot.render(stack.peek().getPositionMatrix(), x, y + height / 2f);
+
+        BuiltRectangle mid = Builder.rectangle()
+                .size(new SizeState(width, height * 0.35f))
+                .radius(new QuadRadiusState(0))
+                .color(new QuadColorState(topColor, bottomColor, bottomColor, topColor))
+                .build();
+        mid.render(stack.peek().getPositionMatrix(), x, y + height * 0.325f);
+    }
     public void drawStyledRect(MatrixStack stack, float x, float y, float width, float height, float radius, Color color, int blurAlpha) {
         drawBlurredRect(stack, x, y, width, height, radius, 10f, new Color(255, 255, 255, blurAlpha));
         drawRoundedRect(stack, x, y, width, height, radius, color);
