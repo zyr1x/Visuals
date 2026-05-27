@@ -190,9 +190,6 @@ public class ClickGui extends Screen implements Wrapper {
 
         Render2D.drawRoundedRect(ctx.getMatrices(), spX, spY, SETTINGS_W, PANEL_H, 10f,
                 new Color(18, 18, 24, panelA));
-        Render2D.drawGradientRect(ctx.getMatrices(), spX, spY, SETTINGS_W, PANEL_H,
-                new Color(255, 255, 255, (int)(18 * alpha)),
-                new Color(255, 255, 255, 0), false);
 
         int textA = (int)(255 * alpha);
         if (activeSettings != null) {
@@ -234,9 +231,6 @@ public class ClickGui extends Screen implements Wrapper {
         // Общий фон всей панели
         Render2D.drawRoundedRect(ctx.getMatrices(), panelX, panelY, PANEL_W, PANEL_H, 12f,
                 new Color(14, 14, 20, panelA));
-        Render2D.drawGradientRect(ctx.getMatrices(), panelX, panelY, PANEL_W, PANEL_H,
-                new Color(255, 255, 255, (int)(12 * uiAlpha)),
-                new Color(255, 255, 255, 0), false);
 
         renderSidebar(ctx, mouseX, mouseY);
         renderContentArea(ctx, mouseX, mouseY, delta);
@@ -246,8 +240,13 @@ public class ClickGui extends Screen implements Wrapper {
     private void renderSidebar(DrawContext ctx, int mouseX, int mouseY) {
         int panelA = (int)(255 * uiAlpha);
 
-        // Фон сайдбара (чуть светлее)
+// Фон сайдбара — скруглённые углы только слева
         Render2D.drawRoundedRect(ctx.getMatrices(), panelX, panelY, SIDEBAR_W, PANEL_H, 12f,
+                new Color(20, 20, 28, panelA));
+// Перекрываем правые скруглённые углы прямым прямоугольником
+        Render2D.drawRect(ctx.getMatrices(),
+                panelX + SIDEBAR_W - 14f, panelY,
+                14f, PANEL_H,
                 new Color(20, 20, 28, panelA));
         // Правая граница сайдбара
         Render2D.drawRect(ctx.getMatrices(), panelX + SIDEBAR_W - 1f, panelY + 10f,
