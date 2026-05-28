@@ -1,21 +1,21 @@
 {
   "schemaVersion": 1,
-  "id": "simplevisuals",
+  "id": "dontvisuals",
   "version": "0.1",
   "name": "DontVisuals",
   "description": "The best free visual mod",
   "authors": ["Lewis", "DontZleg"],
   "contact": {},
   "license": "MIT",
-  "icon": "assets/simplevisuals/logo.png",
+  "icon": "assets/dontvisuals/logo.png",
   "environment": "*",
   "entrypoints": {
     "main": [
-      "dev.simplevisuals.simplevisuals"
+      "dev.dontvisuals.dontvisuals"
     ]
   },
   "mixins": [
-    "simplevisuals.mixins.json"
+    "dontvisuals.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.16.10",
