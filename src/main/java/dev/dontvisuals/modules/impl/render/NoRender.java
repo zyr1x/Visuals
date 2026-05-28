@@ -18,6 +18,7 @@ public class NoRender extends Module {
     public @NotNull BooleanSetting particles = new BooleanSetting(I18n.translate("Particles"), true);
     public @NotNull BooleanSetting armor = new BooleanSetting(I18n.translate("Armor"), false);
     public @NotNull BooleanSetting limbs = new BooleanSetting(I18n.translate("Limbs"), false);
+    public @NotNull BooleanSetting vignette = new BooleanSetting(I18n.translate("Vignette"), true);
 
     public NoRender() {
         super("NoRender", Category.Render, I18n.translate("module.norender.description"));

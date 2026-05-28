@@ -8,6 +8,7 @@ import net.minecraft.client.resource.language.I18n;
 public class DiscordRPCModule extends Module {
     public DiscordRPCModule() {
         super("DiscordRPC", Category.Utility, I18n.translate("module.discordrpc.description"));
+        this.toggle();
     }
 
     @Override

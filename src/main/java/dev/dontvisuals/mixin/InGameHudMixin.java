@@ -60,6 +60,14 @@ public abstract class InGameHudMixin {
         }
     }
 
+    @Inject(method = "renderVignetteOverlay", at = @At("HEAD"), cancellable = true)
+    public void renderVignetteOverlay(DrawContext context, net.minecraft.entity.Entity entity, CallbackInfo ci) {
+        if (dontvisuals.getInstance().getModuleManager().getModule(NoRender.class).isToggled()
+                && dontvisuals.getInstance().getModuleManager().getModule(NoRender.class).vignette.getValue()) {
+            ci.cancel();
+        }
+    }
+
     @Unique
     private boolean isPotion(ItemStack stack, StatusEffect status) {
         if (!(stack.getItem() instanceof PotionItem)) return false;

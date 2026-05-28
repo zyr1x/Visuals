@@ -81,26 +81,28 @@ public class Watermark extends HudElement implements ThemeManager.ThemeChangeLis
             float logoGlyphH = fontIcons.getHeight(logoSize);
             float logoCenteredY = getY() + (totalHeight - logoGlyphH) / 2f;
 
-            // Глоу
-            Render2D.drawGlowOutline(
-                    matrices,
-                    getX() + paddingX + 0.6f,
-                    logoCenteredY,
-                    logoSize,
-                    logoGlyphH,
-                    logoSize / 0.5f,
-                    liveAccent,
-                    150,
-                    15
-            );
+            // Глоу — остаётся как есть
+             Render2D.drawGlowOutline(
+                     matrices,
+                     getX() + paddingX + 0.6f,
+                     logoCenteredY,
+                     logoSize,
+                     logoGlyphH,
+                     logoSize / 0.5f,
+                     liveAccent,
+                     150,
+                     15
+             );
 
-            // Буква D — центрируется по реальной высоте глифа
+            // Буква D — отдельная коррекция по Y
+            float logoTextY = getY() + (totalHeight - fontSizeTitle) / 2f - 1f; // подбери -1f / -2f под свой шрифт
+
             Render2D.drawFont(
                     matrices,
                     fontIcons.getFont(logoSize),
                     "D",
-                    getX() + paddingX,
-                    logoCenteredY,
+                    getX() + paddingX + 2.6f,   // <-- двигай вправо, увеличивай значение
+                    logoTextY - 4.6f,            // <-- двигай вверх, увеличивай значение
                     liveAccent
             );
 

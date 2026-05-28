@@ -133,6 +133,8 @@
   "mode.marker": "Маркер",
   "mode.soul": "Призраки",
   "mode.circle": "Круг",
+  "mode.blocks": "Блоки",
+  "mode.texture": "Круг",
 
   "Texture": "Текстура",
   "Animation": "Анимация",
@@ -278,6 +280,7 @@
   "NoHurtCam": "Тряска камеры",
   "Fire": "Огонь",
   "Totem": "Тотем",
+  "Vignette": "Виньетка",
   "Potions": "Эффекты",
   "Blocks": "Блоки",
   "ScoreBoard": "Счёт",

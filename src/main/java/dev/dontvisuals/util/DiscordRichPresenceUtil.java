@@ -8,7 +8,7 @@ import dev.firstdark.rpc.models.User;
 import dev.firstdark.rpc.handlers.RPCEventHandler;
 
 public class DiscordRichPresenceUtil {
-    private static final String DEFAULT_APP_ID = "1508938408158957658";
+    private static final String DEFAULT_APP_ID = "1509598467918528772";
 
     private static volatile boolean running = false;
     private static Thread rpcThread;
@@ -35,30 +35,34 @@ public class DiscordRichPresenceUtil {
             @Override
             public void ready(User user) {
                 running = true;
+                System.out.println("[DiscordRPC] Ready! User: " + user.getUsername());
                 pushPresence();
             }
 
             @Override
             public void disconnected(ErrorCode errorCode, String message) {
                 running = false;
+                System.out.println("[DiscordRPC] Disconnected: " + errorCode + " - " + message);
             }
 
             @Override
             public void errored(ErrorCode errorCode, String message) {
+                System.out.println("[DiscordRPC] Error: " + errorCode + " - " + message);
             }
         };
 
         try {
             rpc.init(appId, handler, false);
         } catch (Throwable t) {
+            System.out.println("[DiscordRPC] Init failed: " + t.getMessage());
             return;
         }
 
         rpcThread = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {
                 try {
-                    if (running) pushPresence();
                     Thread.sleep(2000);
+                    if (running) pushPresence();
                 } catch (InterruptedException e) {
                     break;
                 } catch (Throwable ignored) {}
@@ -81,8 +85,9 @@ public class DiscordRichPresenceUtil {
     private static void pushPresence() {
         if (rpc == null) return;
         DiscordRichPresence presence = DiscordRichPresence.builder()
-                .details(state != null && !state.isEmpty() ? state : "https://t.me/dontvisuals")
-                .largeImageText("https://t.me/dontvisuals")
+                .details("DontVisuals")
+                .state(state != null && !state.isEmpty() ? state : "t.me/dontvisuals")
+                .largeImageText("DontVisuals")
                 .smallImageText("Playing")
                 .activityType(ActivityType.PLAYING)
                 .button(DiscordRichPresence.RPCButton.of("Скачать", "https://t.me/dontvisuals"))
