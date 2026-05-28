@@ -1,0 +1,67 @@
+{
+  "bell": {
+    "sounds": [
+      { "name": "dontvisuals:bell" }
+    ]
+  },
+  "crime": {
+    "sounds": [
+      { "name": "dontvisuals:crime" }
+    ]
+  },
+  "nya": {
+    "sounds": [
+      { "name": "dontvisuals:nya" }
+    ]
+  },
+  "skeet": {
+    "sounds": [
+      { "name": "dontvisuals:skeet" }
+    ]
+  },
+  "uwu": {
+    "sounds": [
+      { "name": "dontvisuals:uwu" }
+    ]
+  },
+  "enable": {
+    "sounds": [
+      { "name": "dontvisuals:enable" }
+    ]
+  },
+  "disable": {
+    "sounds": [
+      { "name": "dontvisuals:disable" }
+    ]
+  },
+  "enable1": {
+    "sounds": [
+      { "name": "dontvisuals:enable1" }
+    ]
+  },
+  "enable2": {
+    "sounds": [
+      { "name": "dontvisuals:enable2" }
+    ]
+  },
+  "disable1": {
+    "sounds": [
+      { "name": "dontvisuals:disable1" }
+    ]
+  },
+  "disable2": {
+    "sounds": [
+      { "name": "dontvisuals:disable2" }
+    ]
+  },
+  "kill2": {
+    "sounds": [
+      { "name": "dontvisuals:kill2" }
+    ]
+  },
+  "welcome": {
+    "sounds": [
+      { "name": "dontvisuals:welcome" }
+    ]
+  }
+}
