@@ -84,7 +84,7 @@ public class TargetEsp extends Module implements ThemeManager.ThemeChangeListene
         markerScale.setVisible(() -> modeMarker.getValue());
         markerGlow.setVisible(() -> modeMarker.getValue());
         markerGlowIntensity.setVisible(() -> modeMarker.getValue() && markerGlow.getValue());
-        markerHitFlash.setVisible(() -> modeMarker.getValue());
+        markerHitFlash.setVisible(() -> true);
         markerMode.setVisible(() -> modeMarker.getValue());
 
         // Ghosts visibility
@@ -92,7 +92,7 @@ public class TargetEsp extends Module implements ThemeManager.ThemeChangeListene
         ghostsParticleDensity.setVisible(() -> modeGhosts.getValue());
         ghostsGlow.setVisible(() -> modeGhosts.getValue());
         ghostsGlowIntensity.setVisible(() -> modeGhosts.getValue() && ghostsGlow.getValue());
-        markerHitFlash.setVisible(() -> modeMarker.getValue());
+        markerHitFlash.setVisible(() -> true);
         ghostsAlpha.setVisible(() -> modeGhosts.getValue());
 
         // Jello visibility
@@ -100,7 +100,7 @@ public class TargetEsp extends Module implements ThemeManager.ThemeChangeListene
         jelloAnimationSpeed.setVisible(() -> modeJello.getValue());
         jelloGlow.setVisible(() -> modeJello.getValue());
         jelloGlowIntensity.setVisible(() -> modeJello.getValue() && jelloGlow.getValue());
-        markerHitFlash.setVisible(() -> modeMarker.getValue());
+        markerHitFlash.setVisible(() -> true);
         jelloAlpha.setVisible(() -> modeJello.getValue());
 
         this.themeManager = ThemeManager.getInstance();

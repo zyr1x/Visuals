@@ -24,5 +24,3 @@ public abstract class RenderLayerMixin {
         return RenderLayer.getArmorCutoutNoCull(texture);
     }
 }
-
-

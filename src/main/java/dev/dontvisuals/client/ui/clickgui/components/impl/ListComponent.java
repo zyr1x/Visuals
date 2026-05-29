@@ -56,7 +56,15 @@ public class ListComponent extends Component {
                         (int) (themeText.getAlpha() * ga)));
 
         // Счётчик
-        String counter = "(" + setting.getToggled().size() + "/" + setting.getValue().size() + ")";
+        String counter;
+        if (setting.isSingleSelect()) {
+            var opts = setting.getValue();
+            int cur = 1;
+            for (int i = 0; i < opts.size(); i++) if (opts.get(i).getValue()) { cur = i + 1; break; }
+            counter = "(" + cur + "/" + opts.size() + ")";
+        } else {
+            counter = "(" + setting.getToggled().size() + "/" + setting.getValue().size() + ")";
+        }
         float  cw      = Fonts.REGULAR.getWidth(counter, 7f);
         Render2D.drawFont(ctx.getMatrices(), Fonts.REGULAR.getFont(7f), counter,
                 x + width - cw - 6f, y + (height - Fonts.REGULAR.getHeight(7f)) / 2f,

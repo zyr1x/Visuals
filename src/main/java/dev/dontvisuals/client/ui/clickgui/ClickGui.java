@@ -48,6 +48,10 @@ public class ClickGui extends Screen implements Wrapper {
     private static Category selectedCategory = Category.Render;
     private static float scrollY             = 0f;
     private static float scrollYTarget       = 0f;
+    // Theme tab scroll
+    private static float themeScrollY       = 0f;
+    private static float themeScrollYTarget = 0f;
+    private float        themeMaxScroll     = 0f;
     // -----------------------------
 
     // ─── Размеры панели ───────────────────────────────────────────────────────
@@ -383,47 +387,122 @@ public class ClickGui extends Screen implements Wrapper {
     }
 
     // ─── Вкладка тем ─────────────────────────────────────────────────────────
+    // Два столбца: статичные (слева) | градиентные (справа)
+    private static final float THEME_CELL_W   = 155f;  // ширина кнопки темы
+    private static final float THEME_CELL_H   = 34f;   // высота кнопки темы
+    private static final float THEME_GAP      = 6f;    // зазор между кнопками
+    private static final float THEME_COL_GAP  = 10f;   // зазор между двумя столбцами
+    private static final float THEME_HEADER_H = 18f;   // высота заголовка секции
+
     private void renderThemeTab(DrawContext ctx, int mouseX, int mouseY, float startCX, float startCY, float cw) {
-        ThemeManager.Theme[] themes = themeManager.getAvailableThemes();
+        ThemeManager.Theme[] staticThemes   = themeManager.getStaticThemes();
+        ThemeManager.Theme[] gradientThemes = themeManager.getGradientThemes();
         String currentName = themeManager.getCurrentTheme().getName();
 
-        float sx   = startCX + 12f;
-        float sy   = startCY + 14f;
-        float cellW = 80f;
-        float cellH = 38f;
-        float gap   = 8f;
-        int   cols  = (int)((cw - 12f) / (cellW + gap));
+        float pad    = 12f;
+        float colX1  = startCX + pad;
+        float colX2  = colX1 + THEME_CELL_W + THEME_COL_GAP;
 
-        for (int i = 0; i < themes.length; i++) {
-            ThemeManager.Theme t  = themes[i];
-            float tx = sx + (i % cols) * (cellW + gap);
-            float ty = sy + (i / cols) * (cellH + gap);
+        // Зона клипа (scissor): вся content area
+        float clipX  = startCX;
+        float clipY  = startCY;
+        float clipW  = cw;
+        float clipH  = PANEL_H;
 
-            boolean active = t.getName().equals(currentName);
-            Color   accent = t.getAccentColor();
+        // Плавный скролл
+        float smooth = 0.18f;
+        themeScrollY += (themeScrollYTarget - themeScrollY) * smooth;
 
-            int bgA = (int)((active ? 180 : 45) * uiAlpha);
-            Render2D.drawRoundedRect(ctx.getMatrices(), tx, ty, cellW, cellH, 8f,
-                    new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), bgA));
+        // Считаем максимальный контент (самый длинный столбец)
+        int maxItems = Math.max(staticThemes.length, gradientThemes.length);
+        float totalContentH = THEME_HEADER_H + 4f + maxItems * (THEME_CELL_H + THEME_GAP) + 10f;
+        themeMaxScroll = Math.max(0f, totalContentH - clipH);
+        themeScrollY   = clamp(themeScrollY, 0f, themeMaxScroll);
+        themeScrollYTarget = clamp(themeScrollYTarget, 0f, themeMaxScroll);
 
-            if (active) {
-                Render2D.drawRoundedRect(ctx.getMatrices(),
-                        tx - 1.5f, ty - 1.5f, cellW + 3f, cellH + 3f, 9.5f,
-                        new Color(accent.getRed(), accent.getGreen(), accent.getBlue(),
-                                (int)(160 * uiAlpha)));
-            }
+        float baseY  = startCY + 10f - themeScrollY; // смещение по скроллу
 
-            Render2D.drawRoundedRect(ctx.getMatrices(),
-                    tx + 8f, ty + (cellH - 14f) / 2f, 14f, 14f, 7f,
-                    new Color(accent.getRed(), accent.getGreen(), accent.getBlue(),
-                            (int)(255 * uiAlpha)));
+        // Заголовки — фиксированные (вне scissor, рисуем до него)
+        float headerFixedY = startCY + 10f;
+        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7f),
+                "Статичные",
+                colX1, headerFixedY + (THEME_HEADER_H - Fonts.BOLD.getHeight(7f)) / 2f,
+                new Color(180, 180, 200, (int)(200 * uiAlpha)));
+        Render2D.drawRect(ctx.getMatrices(),
+                colX1, headerFixedY + THEME_HEADER_H - 1f,
+                THEME_CELL_W, 1f,
+                new Color(255, 255, 255, (int)(18 * uiAlpha)));
 
-            String label = t.getName();
-            float  lw    = Fonts.BOLD.getWidth(label, 7.5f);
-            Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7.5f), label,
-                    tx + 26f + (cellW - 26f - lw) / 2f, ty + (cellH - Fonts.BOLD.getHeight(7.5f)) / 2f,
-                    new Color(255, 255, 255, (int)(230 * uiAlpha)));
+        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7f),
+                "Переливающиеся",
+                colX2, headerFixedY + (THEME_HEADER_H - Fonts.BOLD.getHeight(7f)) / 2f,
+                new Color(180, 180, 200, (int)(200 * uiAlpha)));
+        Render2D.drawRect(ctx.getMatrices(),
+                colX2, headerFixedY + THEME_HEADER_H - 1f,
+                THEME_CELL_W, 1f,
+                new Color(255, 255, 255, (int)(18 * uiAlpha)));
+
+        // Scissor — всё ниже заголовков обрезается по границе панели
+        float listClipY = headerFixedY + THEME_HEADER_H + 2f;
+        float listClipH = clipH - (listClipY - startCY) - 8f;
+        Render2D.startScissor(ctx, clipX, listClipY, clipW, listClipH);
+
+        // ── Кнопки статичных тем ──
+        float cellY = baseY + THEME_HEADER_H + 4f;
+        for (ThemeManager.Theme t : staticThemes) {
+            renderThemeCell(ctx, mouseX, mouseY, t, colX1, cellY, currentName);
+            cellY += THEME_CELL_H + THEME_GAP;
         }
+
+        // ── Кнопки градиентных тем ──
+        cellY = baseY + THEME_HEADER_H + 4f;
+        for (ThemeManager.Theme t : gradientThemes) {
+            renderThemeCell(ctx, mouseX, mouseY, t, colX2, cellY, currentName);
+            cellY += THEME_CELL_H + THEME_GAP;
+        }
+
+        Render2D.stopScissor(ctx);
+
+        // Скроллбар
+        renderScrollbar(ctx, startCX + clipW - 3f, listClipY, listClipH,
+                themeScrollY, themeMaxScroll, uiAlpha);
+    }
+
+    /** Рисует одну кнопку темы */
+    private void renderThemeCell(DrawContext ctx, int mouseX, int mouseY,
+                                 ThemeManager.Theme t, float tx, float ty, String currentName) {
+        boolean active  = t.getName().equals(currentName);
+        boolean hovered = mouseX >= tx && mouseX <= tx + THEME_CELL_W
+                && mouseY >= ty && mouseY <= ty + THEME_CELL_H;
+        Color accent = t.getAccentColor();
+
+        // Фон кнопки
+        int bgA = (int)((active ? 160 : hovered ? 70 : 40) * uiAlpha);
+        Render2D.drawRoundedRect(ctx.getMatrices(), tx, ty, THEME_CELL_W, THEME_CELL_H, 7f,
+                new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), bgA));
+
+        // Рамка активной темы
+        if (active) {
+            Render2D.drawRoundedRect(ctx.getMatrices(),
+                    tx - 1.5f, ty - 1.5f, THEME_CELL_W + 3f, THEME_CELL_H + 3f, 8.5f,
+                    new Color(accent.getRed(), accent.getGreen(), accent.getBlue(),
+                            (int)(140 * uiAlpha)));
+        }
+
+        // Цветной кружок-превью
+        float circleSize = 12f;
+        float circleX = tx + 10f;
+        float circleY = ty + (THEME_CELL_H - circleSize) / 2f;
+        Render2D.drawRoundedRect(ctx.getMatrices(),
+                circleX, circleY, circleSize, circleSize, circleSize / 2f,
+                new Color(accent.getRed(), accent.getGreen(), accent.getBlue(),
+                        (int)(255 * uiAlpha)));
+
+        // Название
+        String label = t.getName();
+        Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7.5f), label,
+                tx + 28f, ty + (THEME_CELL_H - Fonts.BOLD.getHeight(7.5f)) / 2f,
+                new Color(255, 255, 255, (int)(230 * uiAlpha)));
     }
 
     // ─── Список модулей в 2 колонки ──────────────────────────────────────────
@@ -521,6 +600,8 @@ public class ClickGui extends Screen implements Wrapper {
                 if (TABS[i] != selectedCategory) {
                     scrollY        = 0f;
                     scrollYTarget  = 0f;
+                    themeScrollY       = 0f;
+                    themeScrollYTarget = 0f;
                     activeSettings = null;
                     searchQuery    = "";
                     searchFocused  = false;
@@ -544,20 +625,41 @@ public class ClickGui extends Screen implements Wrapper {
 
         // ── Клики по теме ──
         if (selectedCategory == Category.Theme) {
-            ThemeManager.Theme[] themes = themeManager.getAvailableThemes();
-            float startX = panelX + SIDEBAR_W + 12f;
-            float startY = panelY + 14f;
-            float cellW  = 80f, cellH = 38f, gap = 8f;
-            float contentW = CONTENT_W - 12f;
-            int   cols   = (int)(contentW / (cellW + gap));
-            for (int i = 0; i < themes.length; i++) {
-                float tcx = startX + (i % cols) * (cellW + gap);
-                float tcy = startY + (i / cols) * (cellH + gap);
-                if (mx >= tcx && mx <= tcx + cellW && my >= tcy && my <= tcy + cellH) {
-                    themeManager.setTheme(themes[i]);
+            float pad    = 12f;
+            float colX1  = panelX + SIDEBAR_W + pad;
+            float colX2  = colX1 + THEME_CELL_W + THEME_COL_GAP;
+            // Заголовки фиксированы — кнопки начинаются с учётом скролла
+            float startY = panelY + 10f + THEME_HEADER_H + 4f - themeScrollY;
+            // Клики только в зоне списка (ниже заголовков)
+            float clipTop = panelY + 10f + THEME_HEADER_H + 2f;
+            float clipBot = panelY + PANEL_H - 8f;
+
+            // Статичные (левый столбец)
+            ThemeManager.Theme[] staticThemes = themeManager.getStaticThemes();
+            float cellY = startY;
+            for (ThemeManager.Theme t : staticThemes) {
+                if (my >= clipTop && my <= clipBot
+                        && mx >= colX1 && mx <= colX1 + THEME_CELL_W
+                        && my >= cellY && my <= cellY + THEME_CELL_H) {
+                    themeManager.setTheme(t);
                     return true;
                 }
+                cellY += THEME_CELL_H + THEME_GAP;
             }
+
+            // Градиентные (правый столбец)
+            ThemeManager.Theme[] gradientThemes = themeManager.getGradientThemes();
+            cellY = startY;
+            for (ThemeManager.Theme t : gradientThemes) {
+                if (my >= clipTop && my <= clipBot
+                        && mx >= colX2 && mx <= colX2 + THEME_CELL_W
+                        && my >= cellY && my <= cellY + THEME_CELL_H) {
+                    themeManager.setTheme(t);
+                    return true;
+                }
+                cellY += THEME_CELL_H + THEME_GAP;
+            }
+
             return true;
         }
 
@@ -634,6 +736,16 @@ public class ClickGui extends Screen implements Wrapper {
         float listW = CONTENT_W - 20f;
         float listH = PANEL_H - 20f;
         float step  = (float)(-v * 12f);
+
+        if (selectedCategory == Category.Theme) {
+            float themeAreaX = panelX + SIDEBAR_W;
+            float themeAreaW = CONTENT_W;
+            if (mx >= themeAreaX && mx <= themeAreaX + themeAreaW
+                    && my >= panelY && my <= panelY + PANEL_H) {
+                themeScrollYTarget = clamp(themeScrollYTarget + step, 0f, themeMaxScroll);
+                return true;
+            }
+        }
 
         if (mx >= listX && mx <= listX + listW && my >= listY && my <= listY + listH) {
             scrollYTarget = clamp(scrollYTarget + step, 0f, maxScroll);

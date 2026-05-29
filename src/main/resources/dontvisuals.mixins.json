@@ -18,7 +18,8 @@
     "MixinCapeFeatureRenderer",
     "ParticleManagerMixin",
     "accessors.IGameRenderer",
-    "accessors.IMinecraftClientSessionAccessor"
+    "accessors.IMinecraftClientSessionAccessor",
+    "accessors.OverlayTextureMixin"
   ],
   "client": [
     "MixinMultiplayerScreen",
@@ -33,6 +34,7 @@
     "ClientWorldPropertiesMixin",
     "EntityRendererNameProtectMixin",
     "GameRendererMixin",
+    "HitSoundSuppressMixin",
     "InGameHudMixin",
     "InGameOverlayRendererMixin",
     "ItemRendererMixin",

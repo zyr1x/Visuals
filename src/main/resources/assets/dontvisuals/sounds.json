@@ -24,6 +24,11 @@
       { "name": "dontvisuals:uwu" }
     ]
   },
+  "pook": {
+    "sounds": [
+      {  "name": "dontvisuals:pook" }
+    ]
+  },
   "enable": {
     "sounds": [
       { "name": "dontvisuals:enable" }
