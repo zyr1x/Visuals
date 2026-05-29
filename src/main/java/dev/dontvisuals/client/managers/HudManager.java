@@ -32,11 +32,9 @@ public class HudManager implements Wrapper {
     @Setter private HudElement currentDragging;
     private final List<HudElement> hudElements = new ArrayList<>();
     protected final ListSetting elements = new ListSetting("setting.layout",
-            new BooleanSetting("Watermark", true),
             new BooleanSetting("TargetHud", true),
             new BooleanSetting("Potions", true),
-            new BooleanSetting("ArmorHUD", true),
-            new BooleanSetting("Hotbar", true)
+            new BooleanSetting("ArmorHUD", true)
     );
     @Setter private Window window;
 

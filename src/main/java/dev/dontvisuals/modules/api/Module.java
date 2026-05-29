@@ -18,6 +18,7 @@ public abstract class Module implements Wrapper {
     private final String name, description;
     private final Category category;
     protected boolean toggled;
+    protected boolean silent = false;
     @Setter private Bind bind = new Bind(-1, false);
     private final List<Setting<?>> settings = new ArrayList<>();
 
@@ -27,7 +28,6 @@ public abstract class Module implements Wrapper {
         this.description = description;
     }
 
-    // Temporary backward compatibility; prefer using the 3-arg ctor with explicit description
     public Module(String name, Category category) {
         this(name, category, name);
     }
@@ -35,7 +35,7 @@ public abstract class Module implements Wrapper {
     public void onEnable() {
         toggled = true;
         dontvisuals.getInstance().getEventHandler().subscribe(this);
-        if (!fullNullCheck() && !name.equals("UI")) {
+        if (!silent && !fullNullCheck() && !name.equals("UI")) {
             String translatedName = I18n.translate(name);
             String msg = I18n.translate("notify.featureEnabled", translatedName);
             dontvisuals.getInstance().getNotifyManager().add(new Notify(NotifyIcons.successIcon, msg, 1000));
@@ -45,7 +45,7 @@ public abstract class Module implements Wrapper {
     public void onDisable() {
         toggled = false;
         dontvisuals.getInstance().getEventHandler().unsubscribe(this);
-        if (!fullNullCheck() && !name.equals("UI")) {
+        if (!silent && !fullNullCheck() && !name.equals("UI")) {
             String translatedName = I18n.translate(name);
             String msg = I18n.translate("notify.featureDisabled", translatedName);
             dontvisuals.getInstance().getNotifyManager().add(new Notify(NotifyIcons.failIcon, msg, 1000));
@@ -55,7 +55,6 @@ public abstract class Module implements Wrapper {
     public void setToggled(boolean toggled) {
         if (toggled) onEnable();
         else onDisable();
-        // Планируем автосохранение после изменения состояния модуля
         try {
             dev.dontvisuals.client.managers.AutoSaveManager asm = dontvisuals.getInstance().getAutoSaveManager();
             if (asm != null) asm.scheduleAutoSave();

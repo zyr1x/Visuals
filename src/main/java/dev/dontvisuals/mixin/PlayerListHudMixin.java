@@ -15,27 +15,26 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(PlayerListHud.class)
 public abstract class PlayerListHudMixin {
-	@Inject(method = "render", at = @At("HEAD"))
+
+	@Inject(method = "render", at = @At("HEAD"), cancellable = true)
 	private void dontvisuals$setupTabAnimation(DrawContext context, int scaledWidth, Scoreboard scoreboard, ScoreboardObjective objective, CallbackInfo ci) {
 		BetterMinecraft module = dontvisuals.getInstance().getModuleManager().getModule(BetterMinecraft.class);
 		if (module == null || !module.isToggled() || !module.smoothTab.getValue()) return;
 
-		float value = module.getTabOpenAnimation().getValue();
-		// Avoid rendering if the tab is fully closed, but don't cancel yet
+		float value = (float) module.getTabOpenAnimation().getValue();
+
 		if (!module.isTabPressed() && value <= 0.01f) {
-			ci.cancel(); // Cancel only if the tab is effectively invisible
+			ci.cancel();
 			return;
 		}
 
 		MatrixStack matrices = context.getMatrices();
 		matrices.push();
 
-		// Apply slide animation (move tab up/down)
 		float slideOffset = 22.0f;
 		float slide = slideOffset * (1.0f - value);
 		matrices.translate(0, -slide, 0);
 
-		// Enable blending and set transparency for all rendered elements
 		RenderSystem.enableBlend();
 		RenderSystem.defaultBlendFunc();
 		RenderSystem.setShaderColor(1f, 1f, 1f, value);
@@ -46,7 +45,9 @@ public abstract class PlayerListHudMixin {
 		BetterMinecraft module = dontvisuals.getInstance().getModuleManager().getModule(BetterMinecraft.class);
 		if (module == null || !module.isToggled() || !module.smoothTab.getValue()) return;
 
-		// Clean up: reset the matrix stack and blending state
+		float value = (float) module.getTabOpenAnimation().getValue();
+		if (!module.isTabPressed() && value <= 0.01f) return;
+
 		context.getMatrices().pop();
 		RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
 		RenderSystem.disableBlend();

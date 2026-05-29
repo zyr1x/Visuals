@@ -10,6 +10,7 @@
     "HeldItemRendererMixin",
     "HitSoundMixin",
     "ItemEntityRendererMixin",
+    "ChatScreenAnimationMixin",
     "KeyboardMixin",
     "ClientPlayerInteractionManagerMixin",
     "LimbAnimatorMixin",

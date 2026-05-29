@@ -35,6 +35,7 @@ public class Zoom extends Module {
 
 	public Zoom() {
 		super("Zoom", Category.Render, I18n.translate("module.zoom.description"));
+		this.silent = true;
 	}
 
 	@Override
@@ -47,11 +48,9 @@ public class Zoom extends Module {
 	@Override
 	public void onDisable() {
 		super.onDisable();
-		// Keep state to allow smooth return handled in applyZoom
 	}
 
 	public float applyZoom(float baseFov, float tickDelta) {
-		// Capture the unzoomed FOV once to avoid feedback-induced jitter
 		if (originalFov < 0.0f) originalFov = baseFov;
 
 		boolean active = isToggled();
@@ -59,9 +58,7 @@ public class Zoom extends Module {
 		float targetFov = active ? (originalFov / strength) : originalFov;
 
 		if (!smoothZoom.getValue()) {
-			// Instant mode
 			currentFov = targetFov;
-			// If returned, clear state
 			if (!active && Math.abs(currentFov - originalFov) <= 0.0001f) {
 				currentFov = -1.0f;
 				originalFov = -1.0f;
@@ -80,13 +77,11 @@ public class Zoom extends Module {
 
 		currentFov += (targetFov - currentFov) * alpha;
 
-		// Snap when close enough to prevent micro-oscillation
 		float epsilon = 0.0005f;
 		if (Math.abs(targetFov - currentFov) <= epsilon) {
 			currentFov = targetFov;
 		}
 
-		// When return finished, clear state next frames but keep this frame value to avoid step
 		if (!active && currentFov == originalFov) {
 			currentFov = -1.0f;
 			originalFov = -1.0f;
@@ -95,4 +90,4 @@ public class Zoom extends Module {
 
 		return currentFov;
 	}
-} 
+}

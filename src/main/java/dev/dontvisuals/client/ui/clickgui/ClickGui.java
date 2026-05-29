@@ -28,7 +28,6 @@ import java.util.List;
 
 public class ClickGui extends Screen implements Wrapper {
 
-    // ─── Анимации ────────────────────────────────────────────────────────────
     private final Animation openAnimation     = new Animation(320, 1f, true,  Easing.OUT_QUART);
     private final Animation settingsAnimation = new Animation(260, 1f, false, Easing.OUT_QUART);
 
@@ -37,42 +36,30 @@ public class ClickGui extends Screen implements Wrapper {
     private boolean closing = false;
     private float   uiAlpha = 0f;
 
-    // Категории-вкладки
     private static final Category[] TABS = {
             Category.Render,
             Category.Utility,
             Category.Theme
     };
 
-    // --- СОХРАНЯЕМОЕ СОСТОЯНИЕ ---
     private static Category selectedCategory = Category.Render;
     private static float scrollY             = 0f;
     private static float scrollYTarget       = 0f;
-    // Theme tab scroll
     private static float themeScrollY       = 0f;
     private static float themeScrollYTarget = 0f;
     private float        themeMaxScroll     = 0f;
-    // -----------------------------
 
-    // ─── Размеры панели ───────────────────────────────────────────────────────
-    // Левая боковая панель с категориями
     private static final float SIDEBAR_W    = 150f;
-    // Правая панель с модулями
     private static final float CONTENT_W    = 370f;
-    // Общий размер
     private static final float PANEL_W      = SIDEBAR_W + CONTENT_W;
     private static final float PANEL_H      = 300f;
 
-    // Позиция (пересчитывается каждый кадр)
     private float panelX, panelY;
 
-    // Компоненты по категориям
     private final Map<Category, List<ModuleComponent>> componentsByCategory = new EnumMap<>(Category.class);
 
-    // Скролл
     private float maxScroll = 0f;
 
-    // Панель настроек (правее content)
     private ModuleComponent activeSettings        = null;
     private float           settingsScrollY       = 0f;
     private float           settingsScrollYTarget = 0f;
@@ -80,15 +67,13 @@ public class ClickGui extends Screen implements Wrapper {
     private static final float SETTINGS_W   = 140f;
     private static final float SETTINGS_GAP = 6f;
 
-    // Поиск
     private String  searchQuery   = "";
     private boolean searchFocused = false;
 
-    // Константы компоновки
-    private static final float HEADER_H    = 44f;  // шапка с лого + поиск
-    private static final float MODULE_H    = 40f;  // высота карточки модуля
+    private static final float HEADER_H    = 44f;
+    private static final float MODULE_H    = 40f;
     private static final float MODULE_GAP  = 5f;
-    private static final float MODULE_COLS = 2;    // 2 колонки
+    private static final float MODULE_COLS = 2;
 
     public ClickGui() {
         super(Text.of("dontvisuals-clickgui"));
@@ -123,7 +108,6 @@ public class ClickGui extends Screen implements Wrapper {
         panelY = centerY + slideOff;
     }
 
-    // ─── Звук ────────────────────────────────────────────────────────────────
     private void playToggleSound(boolean wasToggled) {
         ClientSound cs = dontvisuals.getInstance().getModuleManager().getModule(ClientSound.class);
         if (cs != null && cs.isToggled()) {
@@ -134,7 +118,6 @@ public class ClickGui extends Screen implements Wrapper {
         }
     }
 
-    // ─── Закрытие ────────────────────────────────────────────────────────────
     @Override
     public void close() {
         if (!closing) {
@@ -145,9 +128,6 @@ public class ClickGui extends Screen implements Wrapper {
 
     @Override public boolean shouldPause() { return false; }
 
-    // ════════════════════════════════════════════════════════════════════════
-    //  RENDER
-    // ════════════════════════════════════════════════════════════════════════
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
         if (closing) {
@@ -168,7 +148,6 @@ public class ClickGui extends Screen implements Wrapper {
 
         recalcPanelPosition(centerY, slideOff);
 
-        // Затемнение фона
         int backdropA = (int) (160 * uiAlpha);
         if (backdropA > 0)
             Render2D.drawRect(ctx.getMatrices(), 0, 0,
@@ -179,7 +158,6 @@ public class ClickGui extends Screen implements Wrapper {
         renderMainPanel(ctx, mouseX, mouseY, delta);
     }
 
-    // ─── Панель настроек (правее content) ────────────────────────────────────
     private void renderSettingsPanel(DrawContext ctx, int mouseX, int mouseY, float delta) {
         boolean hasSettings = activeSettings != null && !activeSettings.getComponents().isEmpty();
         settingsAnimation.update(hasSettings);
@@ -228,11 +206,9 @@ public class ClickGui extends Screen implements Wrapper {
         renderScrollbar(ctx, spX + SETTINGS_W - 4f, cY, cH, settingsScrollY, settingsMaxScroll, alpha);
     }
 
-    // ─── Главная панель ───────────────────────────────────────────────────────
     private void renderMainPanel(DrawContext ctx, int mouseX, int mouseY, float delta) {
         int panelA = (int)(255 * uiAlpha);
 
-        // Общий фон всей панели
         Render2D.drawRoundedRect(ctx.getMatrices(), panelX, panelY, PANEL_W, PANEL_H, 12f,
                 new Color(14, 14, 20, panelA));
 
@@ -240,35 +216,27 @@ public class ClickGui extends Screen implements Wrapper {
         renderContentArea(ctx, mouseX, mouseY, delta);
     }
 
-    // ─── Левая боковая панель ─────────────────────────────────────────────────
     private void renderSidebar(DrawContext ctx, int mouseX, int mouseY) {
         int panelA = (int)(255 * uiAlpha);
 
-// Фон сайдбара — скруглённые углы только слева
         Render2D.drawRoundedRect(ctx.getMatrices(), panelX, panelY, SIDEBAR_W, PANEL_H, 12f,
                 new Color(20, 20, 28, panelA));
-// Перекрываем правые скруглённые углы прямым прямоугольником
         Render2D.drawRect(ctx.getMatrices(),
                 panelX + SIDEBAR_W - 14f, panelY,
                 14f, PANEL_H,
                 new Color(20, 20, 28, panelA));
-        // Правая граница сайдбара
         Render2D.drawRect(ctx.getMatrices(), panelX + SIDEBAR_W - 1f, panelY + 10f,
                 1f, PANEL_H - 20f, new Color(255, 255, 255, (int)(15 * uiAlpha)));
 
-        // Логотип / название клиента
         Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(13f),
                 "DV", panelX + 14f, panelY + 14f,
                 new Color(255, 255, 255, (int)(220 * uiAlpha)));
 
-        // Поиск
         renderSidebarSearch(ctx, mouseX, mouseY);
 
-        // Разделитель
         Render2D.drawRect(ctx.getMatrices(), panelX + 10f, panelY + 68f, SIDEBAR_W - 20f, 1f,
                 new Color(255, 255, 255, (int)(18 * uiAlpha)));
 
-        // Кнопки категорий
         float tabY = panelY + 78f;
         float tabH = 28f;
         float tabGap = 4f;
@@ -285,7 +253,6 @@ public class ClickGui extends Screen implements Wrapper {
                 Render2D.drawRoundedRect(ctx.getMatrices(), tx, ty, tw, tabH, 7f,
                         new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int)(210 * uiAlpha)));
             } else {
-                // Hover-подсветка
                 boolean hovered = mouseX >= tx && mouseX <= tx + tw && mouseY >= ty && mouseY <= ty + tabH;
                 if (hovered) {
                     Render2D.drawRoundedRect(ctx.getMatrices(), tx, ty, tw, tabH, 7f,
@@ -293,14 +260,12 @@ public class ClickGui extends Screen implements Wrapper {
                 }
             }
 
-            // Иконка категории
             String icon = getCategoryIcon(cat);
             Render2D.drawFont(ctx.getMatrices(), Fonts.REGULAR.getFont(9f),
                     icon, tx + 9f, ty + (tabH - Fonts.REGULAR.getHeight(9f)) / 2f,
                     new Color(active ? 255 : 180, active ? 255 : 180, active ? 255 : 190,
                             (int)(230 * uiAlpha)));
 
-            // Название категории
             String label = cat.name();
             Render2D.drawFont(ctx.getMatrices(),
                     active ? Fonts.BOLD.getFont(8.5f) : Fonts.MEDIUM.getFont(8.5f),
@@ -310,7 +275,6 @@ public class ClickGui extends Screen implements Wrapper {
                             (int)(230 * uiAlpha)));
         }
 
-        // Никнейм внизу
         renderBottomUser(ctx);
     }
 
@@ -324,7 +288,6 @@ public class ClickGui extends Screen implements Wrapper {
         Render2D.drawRoundedRect(ctx.getMatrices(), sx, sy, sw, sh, 6f,
                 new Color(255, 255, 255, (int)(12 * uiAlpha)));
 
-        // Иконка поиска
         Render2D.drawFont(ctx.getMatrices(), Fonts.SEMIBOLD.getFont(8f),
                 "D", sx + 7f, sy + (sh - Fonts.SEMIBOLD.getHeight(8f)) / 2f,
                 new Color(140, 140, 160, a));
@@ -354,14 +317,39 @@ public class ClickGui extends Screen implements Wrapper {
         Render2D.drawRoundedRect(ctx.getMatrices(), bx, by, bw, bh, 7f,
                 new Color(255, 255, 255, (int)(8 * uiAlpha)));
 
-        // Аватар-заглушка
-        Color accent = themeManager.getCurrentTheme().getAccentColor();
-        Render2D.drawRoundedRect(ctx.getMatrices(), bx + 5f, by + (bh - 16f) / 2f, 16f, 16f, 8f,
-                new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int)(180 * uiAlpha)));
+        float avatarX    = bx + 5f;
+        float avatarY    = by + (bh - 16f) / 2f;
+        float avatarSize = 16f;
+
+        if (mc.player != null) {
+            // Фон аватара
+            Render2D.drawRoundedRect(ctx.getMatrices(),
+                    avatarX, avatarY, avatarSize, avatarSize, 4f,
+                    new Color(30, 30, 40, (int)(200 * uiAlpha)));
+
+            // Лицо скина — точно как в TargetHud, UV: начало 0.125 (8/64), размер 0.125 (8/64)
+            Render2D.drawTexture(
+                    ctx.getMatrices(),
+                    avatarX, avatarY, avatarSize, avatarSize, 4f,
+                    0.125f, 0.125f, 0.125f, 0.125f,
+                    ((net.minecraft.client.network.AbstractClientPlayerEntity) mc.player)
+                            .getSkinTextures().texture(),
+                    new Color(255, 255, 255, (int)(255 * uiAlpha))
+            );
+        } else {
+            fallbackAvatar(ctx, avatarX, avatarY, (int) avatarSize);
+        }
 
         Render2D.drawFont(ctx.getMatrices(), Fonts.MEDIUM.getFont(7.5f), username,
                 bx + 26f, by + (bh - Fonts.MEDIUM.getHeight(7.5f)) / 2f,
                 new Color(200, 200, 210, a));
+    }
+
+    private void fallbackAvatar(DrawContext ctx, float x, float y, int size) {
+        Color accent = themeManager.getCurrentTheme().getAccentColor();
+        Render2D.drawRoundedRect(ctx.getMatrices(), x, y, size, size, 4f,
+                new Color(accent.getRed(), accent.getGreen(), accent.getBlue(),
+                        (int)(180 * uiAlpha)));
     }
 
     private String getCategoryIcon(Category cat) {
@@ -373,7 +361,6 @@ public class ClickGui extends Screen implements Wrapper {
         };
     }
 
-    // ─── Область контента (правее сайдбара) ──────────────────────────────────
     private void renderContentArea(DrawContext ctx, int mouseX, int mouseY, float delta) {
         float cx = panelX + SIDEBAR_W;
         float cy = panelY;
@@ -386,13 +373,11 @@ public class ClickGui extends Screen implements Wrapper {
         }
     }
 
-    // ─── Вкладка тем ─────────────────────────────────────────────────────────
-    // Два столбца: статичные (слева) | градиентные (справа)
-    private static final float THEME_CELL_W   = 155f;  // ширина кнопки темы
-    private static final float THEME_CELL_H   = 34f;   // высота кнопки темы
-    private static final float THEME_GAP      = 6f;    // зазор между кнопками
-    private static final float THEME_COL_GAP  = 10f;   // зазор между двумя столбцами
-    private static final float THEME_HEADER_H = 18f;   // высота заголовка секции
+    private static final float THEME_CELL_W   = 155f;
+    private static final float THEME_CELL_H   = 34f;
+    private static final float THEME_GAP      = 6f;
+    private static final float THEME_COL_GAP  = 10f;
+    private static final float THEME_HEADER_H = 18f;
 
     private void renderThemeTab(DrawContext ctx, int mouseX, int mouseY, float startCX, float startCY, float cw) {
         ThemeManager.Theme[] staticThemes   = themeManager.getStaticThemes();
@@ -403,26 +388,22 @@ public class ClickGui extends Screen implements Wrapper {
         float colX1  = startCX + pad;
         float colX2  = colX1 + THEME_CELL_W + THEME_COL_GAP;
 
-        // Зона клипа (scissor): вся content area
         float clipX  = startCX;
         float clipY  = startCY;
         float clipW  = cw;
         float clipH  = PANEL_H;
 
-        // Плавный скролл
         float smooth = 0.18f;
         themeScrollY += (themeScrollYTarget - themeScrollY) * smooth;
 
-        // Считаем максимальный контент (самый длинный столбец)
         int maxItems = Math.max(staticThemes.length, gradientThemes.length);
         float totalContentH = THEME_HEADER_H + 4f + maxItems * (THEME_CELL_H + THEME_GAP) + 10f;
         themeMaxScroll = Math.max(0f, totalContentH - clipH);
         themeScrollY   = clamp(themeScrollY, 0f, themeMaxScroll);
         themeScrollYTarget = clamp(themeScrollYTarget, 0f, themeMaxScroll);
 
-        float baseY  = startCY + 10f - themeScrollY; // смещение по скроллу
+        float baseY  = startCY + 10f - themeScrollY;
 
-        // Заголовки — фиксированные (вне scissor, рисуем до него)
         float headerFixedY = startCY + 10f;
         Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7f),
                 "Статичные",
@@ -442,19 +423,16 @@ public class ClickGui extends Screen implements Wrapper {
                 THEME_CELL_W, 1f,
                 new Color(255, 255, 255, (int)(18 * uiAlpha)));
 
-        // Scissor — всё ниже заголовков обрезается по границе панели
         float listClipY = headerFixedY + THEME_HEADER_H + 2f;
         float listClipH = clipH - (listClipY - startCY) - 8f;
         Render2D.startScissor(ctx, clipX, listClipY, clipW, listClipH);
 
-        // ── Кнопки статичных тем ──
         float cellY = baseY + THEME_HEADER_H + 4f;
         for (ThemeManager.Theme t : staticThemes) {
             renderThemeCell(ctx, mouseX, mouseY, t, colX1, cellY, currentName);
             cellY += THEME_CELL_H + THEME_GAP;
         }
 
-        // ── Кнопки градиентных тем ──
         cellY = baseY + THEME_HEADER_H + 4f;
         for (ThemeManager.Theme t : gradientThemes) {
             renderThemeCell(ctx, mouseX, mouseY, t, colX2, cellY, currentName);
@@ -463,12 +441,10 @@ public class ClickGui extends Screen implements Wrapper {
 
         Render2D.stopScissor(ctx);
 
-        // Скроллбар
         renderScrollbar(ctx, startCX + clipW - 3f, listClipY, listClipH,
                 themeScrollY, themeMaxScroll, uiAlpha);
     }
 
-    /** Рисует одну кнопку темы */
     private void renderThemeCell(DrawContext ctx, int mouseX, int mouseY,
                                  ThemeManager.Theme t, float tx, float ty, String currentName) {
         boolean active  = t.getName().equals(currentName);
@@ -476,12 +452,10 @@ public class ClickGui extends Screen implements Wrapper {
                 && mouseY >= ty && mouseY <= ty + THEME_CELL_H;
         Color accent = t.getAccentColor();
 
-        // Фон кнопки
         int bgA = (int)((active ? 160 : hovered ? 70 : 40) * uiAlpha);
         Render2D.drawRoundedRect(ctx.getMatrices(), tx, ty, THEME_CELL_W, THEME_CELL_H, 7f,
                 new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), bgA));
 
-        // Рамка активной темы
         if (active) {
             Render2D.drawRoundedRect(ctx.getMatrices(),
                     tx - 1.5f, ty - 1.5f, THEME_CELL_W + 3f, THEME_CELL_H + 3f, 8.5f,
@@ -489,7 +463,6 @@ public class ClickGui extends Screen implements Wrapper {
                             (int)(140 * uiAlpha)));
         }
 
-        // Цветной кружок-превью
         float circleSize = 12f;
         float circleX = tx + 10f;
         float circleY = ty + (THEME_CELL_H - circleSize) / 2f;
@@ -498,14 +471,12 @@ public class ClickGui extends Screen implements Wrapper {
                 new Color(accent.getRed(), accent.getGreen(), accent.getBlue(),
                         (int)(255 * uiAlpha)));
 
-        // Название
         String label = t.getName();
         Render2D.drawFont(ctx.getMatrices(), Fonts.BOLD.getFont(7.5f), label,
                 tx + 28f, ty + (THEME_CELL_H - Fonts.BOLD.getHeight(7.5f)) / 2f,
                 new Color(255, 255, 255, (int)(230 * uiAlpha)));
     }
 
-    // ─── Список модулей в 2 колонки ──────────────────────────────────────────
     private void renderModuleList(DrawContext ctx, int mouseX, int mouseY, float delta,
                                   float areaX, float areaY, float areaW) {
         float padH  = 10f;
@@ -522,7 +493,6 @@ public class ClickGui extends Screen implements Wrapper {
         List<ModuleComponent> comps = getFilteredComponents();
         if (comps == null) comps = Collections.emptyList();
 
-        // Ширина одной карточки (2 колонки с зазором)
         float colGap = 6f;
         float cardW  = (listW - colGap) / MODULE_COLS;
 
@@ -566,7 +536,6 @@ public class ClickGui extends Screen implements Wrapper {
         return filtered;
     }
 
-    // ─── Скроллбар ───────────────────────────────────────────────────────────
     private void renderScrollbar(DrawContext ctx, float trackX, float trackY,
                                  float trackH, float scroll, float maxScr, float alpha) {
         if (maxScr <= 0.5f) return;
@@ -581,14 +550,10 @@ public class ClickGui extends Screen implements Wrapper {
                 new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int)(200 * alpha)));
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    //  ВВОД
-    // ════════════════════════════════════════════════════════════════════════
     @Override
     public boolean mouseClicked(double mx, double my, int btn) {
         if (closing) return false;
 
-        // ── Вкладки (в сайдбаре) ──
         float tabY   = panelY + 78f;
         float tabH   = 28f;
         float tabGap = 4f;
@@ -611,7 +576,6 @@ public class ClickGui extends Screen implements Wrapper {
             }
         }
 
-        // ── Клики по поиску (в сайдбаре) ──
         float sx = panelX + 8f;
         float sy = panelY + 36f;
         float sw = SIDEBAR_W - 16f;
@@ -623,18 +587,14 @@ public class ClickGui extends Screen implements Wrapper {
             searchFocused = false;
         }
 
-        // ── Клики по теме ──
         if (selectedCategory == Category.Theme) {
             float pad    = 12f;
             float colX1  = panelX + SIDEBAR_W + pad;
             float colX2  = colX1 + THEME_CELL_W + THEME_COL_GAP;
-            // Заголовки фиксированы — кнопки начинаются с учётом скролла
             float startY = panelY + 10f + THEME_HEADER_H + 4f - themeScrollY;
-            // Клики только в зоне списка (ниже заголовков)
             float clipTop = panelY + 10f + THEME_HEADER_H + 2f;
             float clipBot = panelY + PANEL_H - 8f;
 
-            // Статичные (левый столбец)
             ThemeManager.Theme[] staticThemes = themeManager.getStaticThemes();
             float cellY = startY;
             for (ThemeManager.Theme t : staticThemes) {
@@ -647,7 +607,6 @@ public class ClickGui extends Screen implements Wrapper {
                 cellY += THEME_CELL_H + THEME_GAP;
             }
 
-            // Градиентные (правый столбец)
             ThemeManager.Theme[] gradientThemes = themeManager.getGradientThemes();
             cellY = startY;
             for (ThemeManager.Theme t : gradientThemes) {
@@ -663,7 +622,6 @@ public class ClickGui extends Screen implements Wrapper {
             return true;
         }
 
-        // ── Список модулей ──
         float colGap = 6f;
         float listX  = panelX + SIDEBAR_W + 10f;
         float listY  = panelY + 10f;
@@ -697,7 +655,6 @@ public class ClickGui extends Screen implements Wrapper {
             }
         }
 
-        // ── Панель настроек ──
         if (activeSettings != null && !activeSettings.getComponents().isEmpty()) {
             float anim = (float) settingsAnimation.getValue();
             if (anim > 0.1f) {
@@ -812,7 +769,6 @@ public class ClickGui extends Screen implements Wrapper {
         return super.charTyped(chr, mods);
     }
 
-    // ─── Утилиты ─────────────────────────────────────────────────────────────
     private static float clamp(float v, float lo, float hi) {
         return Math.max(lo, Math.min(hi, v));
     }

@@ -32,20 +32,28 @@ public class ModuleComponent extends Component {
 
     @Getter private final List<Component> components = new ArrayList<>();
 
-    private final Animation hoverAnim      = new Animation(180, 1f, false, Easing.BOTH_SINE);
-    private final Animation toggleAnim     = new Animation(200, 1f, false, Easing.BOTH_SINE);
-    private final Animation bindMenuAnim   = new Animation(180, 1f, false, Easing.BOTH_SINE);
+    private final Animation hoverAnim    = new Animation(180, 1f, false, Easing.BOTH_SINE);
+    private final Animation bindMenuAnim = new Animation(180, 1f, false, Easing.BOTH_SINE);
 
-    private boolean toggleAnimInit  = false;
+    // toggleAnim инициализируется в конструкторе с реальным состоянием модуля
+    private final Animation toggleAnim;
+
     private boolean hoverAnimInit   = false;
     private boolean lastToggleState = false;
 
-    private static final float H = 36f;   // высота строки модуля
+    private static final float H = 36f;
 
     public ModuleComponent(Module module) {
         super(module.getName());
-        this.module         = module;
+        this.module          = module;
         this.lastToggleState = module.isToggled();
+
+        // ── ФИКС: сразу ставим анимацию в реальное состояние модуля ──────────
+        // Создаём с duration=0, обновляем до нужного значения, потом ставим нормальный duration
+        this.toggleAnim = new Animation(0, 1f, false, Easing.BOTH_SINE);
+        this.toggleAnim.update(module.isToggled());
+        this.toggleAnim.setDuration(200);
+        // ─────────────────────────────────────────────────────────────────────
 
         for (Setting<?> s : module.getSettings()) {
             if      (s instanceof BooleanSetting) components.add(new BooleanComponent((BooleanSetting) s));
@@ -67,19 +75,17 @@ public class ModuleComponent extends Component {
         // Hover
         boolean hovered = MathUtils.isHovered(x, y, width, H, mouseX, mouseY);
         if (!hoverAnimInit) {
-            hoverAnim.setDuration(0); hoverAnim.update(hovered);
-            hoverAnim.setDuration(180); hoverAnimInit = true;
+            hoverAnim.setDuration(0);
+            hoverAnim.update(hovered);
+            hoverAnim.setDuration(180);
+            hoverAnimInit = true;
         } else {
             hoverAnim.update(hovered);
         }
 
-        // Toggle
+        // Toggle — просто следим за изменениями, инициализация уже в конструкторе
         boolean cur = module.isToggled();
-        if (!toggleAnimInit) {
-            toggleAnim.setDuration(0); toggleAnim.update(cur);
-            toggleAnim.setDuration(200); toggleAnimInit = true;
-            lastToggleState = cur;
-        } else if (cur != lastToggleState) {
+        if (cur != lastToggleState) {
             toggleAnim.update(cur);
             lastToggleState = cur;
         }
@@ -115,7 +121,8 @@ public class ModuleComponent extends Component {
                     bindStr, bindTextX, bindTextY,
                     new Color(140, 140, 160, (int) (180 * ga)));
         } else {
-            bindTextX = Float.NaN; bindTextY = Float.NaN;
+            bindTextX = Float.NaN;
+            bindTextY = Float.NaN;
         }
 
         // ── Toggle переключатель (справа) ────────────────────────────────────
@@ -128,19 +135,18 @@ public class ModuleComponent extends Component {
         // Трек
         Color trackOff = new Color(40, 40, 55, (int) (200 * ga));
         Color trackOn  = new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int) (220 * ga));
-        // Интерполяция трека
-        int tr = (int) (trackOff.getRed()   + (trackOn.getRed()   - trackOff.getRed())   * ta);
-        int tg = (int) (trackOff.getGreen() + (trackOn.getGreen() - trackOff.getGreen()) * ta);
-        int tb = (int) (trackOff.getBlue()  + (trackOn.getBlue()  - trackOff.getBlue())  * ta);
-        int ta2= (int) (trackOff.getAlpha() + (trackOn.getAlpha() - trackOff.getAlpha()) * ta);
+        int tr  = (int) (trackOff.getRed()   + (trackOn.getRed()   - trackOff.getRed())   * ta);
+        int tg  = (int) (trackOff.getGreen() + (trackOn.getGreen() - trackOff.getGreen()) * ta);
+        int tb  = (int) (trackOff.getBlue()  + (trackOn.getBlue()  - trackOff.getBlue())  * ta);
+        int ta2 = (int) (trackOff.getAlpha() + (trackOn.getAlpha() - trackOff.getAlpha()) * ta);
         Render2D.drawRoundedRect(ctx.getMatrices(), sx, sy, sw, sh, sh / 2f,
                 new Color(tr, tg, tb, ta2));
 
         // Ползунок
-        float pad  = 2.5f;
-        float th2  = sh - pad * 2;
+        float pad    = 2.5f;
+        float th2    = sh - pad * 2;
         float travel = sw - th2 - pad * 2;
-        float tx2  = sx + pad + travel * ta;
+        float tx2    = sx + pad + travel * ta;
         Render2D.drawRoundedRect(ctx.getMatrices(), tx2, sy + pad, th2, th2, th2 / 2f,
                 new Color(255, 255, 255, (int) (240 * ga)));
 
@@ -163,12 +169,11 @@ public class ModuleComponent extends Component {
         Render2D.drawRoundedRect(ctx.getMatrices(), menuX, menuY, itemW, menuH, 4f,
                 new Color(20, 20, 28, (int) (230 * a)));
 
-        Color accent = ThemeManager.getInstance().getCurrentTheme().getAccentColor();
+        Color accent  = ThemeManager.getInstance().getCurrentTheme().getAccentColor();
         boolean isToggle = module.getBind() != null && module.getBind().getMode() == Bind.Mode.TOGGLE;
         boolean isHold   = module.getBind() != null && module.getBind().getMode() == Bind.Mode.HOLD;
         int textA = (int) (255 * a);
 
-        // Toggle row
         if (isToggle) {
             Render2D.drawRoundedRect(ctx.getMatrices(), menuX + 3f, menuY + 3f, itemW - 6f, itemH, 3f,
                     new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int) (80 * a)));
@@ -177,7 +182,6 @@ public class ModuleComponent extends Component {
                 "Toggle", menuX + 10f, menuY + 4f,
                 new Color(255, 255, 255, textA));
 
-        // Hold row
         if (isHold) {
             Render2D.drawRoundedRect(ctx.getMatrices(), menuX + 3f, menuY + 3f + itemH, itemW - 6f, itemH, 3f,
                     new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), (int) (80 * a)));
@@ -196,25 +200,28 @@ public class ModuleComponent extends Component {
         boolean onBindText = !Float.isNaN(bindTextX) &&
                 MathUtils.isHovered(bindTextX, bindTextY - 1f, bindTextW, bindTextH + 2f, (float) mx, (float) my);
 
-        // Клик по тексту бинда → меню режима
         if (btn == 0 && onBindText && !binding
                 && module.getBind() != null && !module.getBind().isEmpty()) {
             showBindModeMenu = !showBindModeMenu;
             return;
         }
 
-        // Меню режима открыто
         if (showBindModeMenu) {
             float itemW = 82f, itemH = 16f, menuH = itemH * 2 + 8f;
             float menuX = x + width - itemW - 16f;
             float menuY = Float.isNaN(bindTextY) ? y + H + 2f : bindTextY - menuH - 3f;
             if (MathUtils.isHovered(menuX, menuY + 3f, itemW - 6f, itemH, (float) mx, (float) my)) {
-                module.getBind().setMode(Bind.Mode.TOGGLE); showBindModeMenu = false; return;
+                module.getBind().setMode(Bind.Mode.TOGGLE);
+                showBindModeMenu = false;
+                return;
             }
             if (MathUtils.isHovered(menuX, menuY + 3f + itemH, itemW - 6f, itemH, (float) mx, (float) my)) {
-                module.getBind().setMode(Bind.Mode.HOLD); showBindModeMenu = false; return;
+                module.getBind().setMode(Bind.Mode.HOLD);
+                showBindModeMenu = false;
+                return;
             }
-            showBindModeMenu = false; return;
+            showBindModeMenu = false;
+            return;
         }
 
         if (onHeader) {
@@ -242,11 +249,9 @@ public class ModuleComponent extends Component {
     @Override public void keyReleased(int k, int s, int m) {}
     @Override public void charTyped(char c, int m) {}
 
-    // ─── высота — только заголовок (настройки в отдельной панели) ────────────
     @Override
     public float getHeight() { return H; }
 
-    // ─── внешний рендер настроек (в левой панели ClickGui) ──────────────────
     public float renderSettingsExternally(DrawContext ctx, float cX, float cY, float cW,
                                           float clipX, float clipY, float clipW, float clipH,
                                           int mx, int my, float delta, float scrollY) {
@@ -269,7 +274,6 @@ public class ModuleComponent extends Component {
         return total;
     }
 
-    // ─── делегирование событий к настройкам (вызывается из ClickGui) ─────────
     public void mouseClickedExternal(double mx, double my, int btn) {
         for (Component c : components) c.mouseClicked(mx, my, btn);
     }
@@ -286,7 +290,6 @@ public class ModuleComponent extends Component {
         for (Component c : components) c.charTyped(chr, mods);
     }
 
-    // ─── геттеры ─────────────────────────────────────────────────────────────
     public Module  getModule()          { return module; }
     public boolean isBindModeMenuOpen() { return showBindModeMenu; }
     public void    setRenderExternally(boolean v) { this.renderExternally = v; }

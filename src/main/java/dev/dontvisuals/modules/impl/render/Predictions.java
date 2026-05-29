@@ -17,6 +17,7 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.projectile.ArrowEntity;
 import net.minecraft.entity.projectile.TridentEntity;
 import net.minecraft.entity.projectile.thrown.EnderPearlEntity;
+import net.minecraft.entity.projectile.thrown.PotionEntity;
 import net.minecraft.item.CrossbowItem;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -34,59 +35,65 @@ import java.util.List;
 
 public class Predictions extends Module implements ThemeManager.ThemeChangeListener {
 
-    private record ProjectilePoint(Vec3d pos, int ticks, boolean isLandingPoint, long creationTime, ProjectileType type, boolean isMoving, Entity hitEntity, boolean isPlayerThrown) {}
+    private record ProjectilePoint(
+            Vec3d pos, int ticks, boolean isLandingPoint, long creationTime,
+            ProjectileType type, boolean isMoving, Entity hitEntity,
+            boolean isPlayerThrown, int entityId
+    ) {}
 
     private enum ProjectileType {
-        PEARL, ARROW, TRIDENT
+        PEARL, ARROW, TRIDENT, POTION
     }
 
-    private final List<ProjectilePoint> projectilePoints = new ArrayList<>();
+    private final List<ProjectilePoint> projectilePoints     = new ArrayList<>();
     private final List<ProjectilePoint> prevProjectilePoints = new ArrayList<>();
     private final ThemeManager themeManager;
     private Color currentColor;
     private Color currentColorSecondary;
 
-    // Settings
-    private final BooleanSetting showPearl = new BooleanSetting("Show Pearl", true, () -> true);
-    private final BooleanSetting showBow = new BooleanSetting("Show Bow", true, () -> true);
-    private final BooleanSetting showCrossbow = new BooleanSetting("Show Crossbow", true, () -> true);
-    private final BooleanSetting showTrident = new BooleanSetting("Show Trident", true, () -> true);
-    private final BooleanSetting showWhenHolding = new BooleanSetting("Show When Holding", true, () -> true);
-    private final BooleanSetting showLandingInfo = new BooleanSetting("Show Landing Info", true, () -> true);
-    private final BooleanSetting highlightPlayers = new BooleanSetting("Highlight Players", true, () -> true);
-    private static final double highlightRange = 100f;
-    // Simulation parameters
-    private static final int MAX_TICKS = 240;
-    private static final int SUBSTEPS = 8;
-    private static final float BASE_LINE_WIDTH = 4.0f;
+    private final BooleanSetting showPearl        = new BooleanSetting("Show Pearl",         true,  () -> true);
+    private final BooleanSetting showBow          = new BooleanSetting("Show Bow",            true,  () -> true);
+    private final BooleanSetting showCrossbow     = new BooleanSetting("Show Crossbow",       true,  () -> true);
+    private final BooleanSetting showTrident      = new BooleanSetting("Show Trident",        true,  () -> true);
+    private final BooleanSetting showPotion       = new BooleanSetting("Show Potion",         true,  () -> true);
+    private final BooleanSetting showWhenHolding  = new BooleanSetting("Show When Holding",   true,  () -> true);
+    private final BooleanSetting showLandingInfo  = new BooleanSetting("Show Landing Info",   true,  () -> true);
+    private final BooleanSetting highlightPlayers = new BooleanSetting("Highlight Players",   true,  () -> true);
 
-    // Pearl physics
-    private static final double PEARL_SPEED = 1.5;
+    private static final double highlightRange  = 100.0;
+    private static final int    MAX_TICKS       = 240;
+    // Уменьшаем substeps — основная причина лагов (было 8 → 4, точность достаточная)
+    private static final int    SUBSTEPS        = 4;
+    private static final float  BASE_LINE_WIDTH = 5.0f;   // жирнее — лучше видно
+
+    // Pearl
+    private static final double PEARL_SPEED        = 1.5;
     private static final double PEARL_SPEED_FACTOR = 1.06;
-    private static final double PEARL_GRAVITY = 0.03;
-
-    // Arrow physics
-    private static final double ARROW_SPEED = 3.0;
+    private static final double PEARL_GRAVITY      = 0.03;
+    // Arrow
+    private static final double ARROW_SPEED   = 3.0;
     private static final double ARROW_GRAVITY = 0.05;
-
-    // Trident physics
-    private static final double TRIDENT_SPEED = 2.5;
-    private static final double TRIDENT_GRAVITY = 0.03;
+    // Trident
+    private static final double TRIDENT_SPEED   = 2.5;
+    private static final double TRIDENT_GRAVITY = 0.05;
+    // Potion
+    private static final double POTION_SPEED   = 0.5;
+    private static final double POTION_GRAVITY = 0.05;
 
     private static final double WATER_DRAG = 0.8;
-    private static final double AIR_DRAG = 0.99;
+    private static final double AIR_DRAG   = 0.99;
 
     public Predictions() {
         super("Predictions", Category.Render, I18n.translate("module.predictions.description"));
-        this.themeManager = ThemeManager.getInstance();
-        this.currentColor = themeManager.getThemeColor();
-        this.currentColorSecondary = themeManager.getCurrentTheme().getSecondaryBackgroundColor();
+        this.themeManager            = ThemeManager.getInstance();
+        this.currentColor            = themeManager.getThemeColor();
+        this.currentColorSecondary   = themeManager.getCurrentTheme().getSecondaryBackgroundColor();
         themeManager.addThemeChangeListener(this);
     }
 
     @Override
     public void onThemeChanged(ThemeManager.Theme theme) {
-        this.currentColor = theme.getBackgroundColor();
+        this.currentColor          = theme.getBackgroundColor();
         this.currentColorSecondary = theme.getSecondaryBackgroundColor();
     }
 
@@ -101,8 +108,6 @@ public class Predictions extends Module implements ThemeManager.ThemeChangeListe
     @EventHandler
     public void onRender2D(EventRender2D e) {
         if (fullNullCheck()) return;
-
-        // Only draw landing info in 2D HUD; 3D path is rendered in onRender3D now
         if (showLandingInfo.getValue() && !projectilePoints.isEmpty()) {
             renderLandingInfo2D(e);
         }
@@ -112,513 +117,379 @@ public class Predictions extends Module implements ThemeManager.ThemeChangeListe
     public void onRender3D(EventRender3D.Game e) {
         if (fullNullCheck()) return;
 
-        // Attach current tick delta for smooth helpers
         Render3D.setTickDelta(e.getTickDelta());
 
-        // Recompute prediction points in 3D phase so trajectory can be drawn in world space
         prevProjectilePoints.clear();
         prevProjectilePoints.addAll(projectilePoints);
         projectilePoints.clear();
 
-        boolean hasPlayerProjectiles = false;
+        // ──────────────────────────────────────────────────────────────
+        // Кэшируем список сущностей ОДИН РАЗ — главный источник лагов.
+        // Раньше mc.world.getEntities() вызывался внутри двойного цикла
+        // MAX_TICKS * SUBSTEPS = до 1920 раз за кадр.
+        // ──────────────────────────────────────────────────────────────
+        List<Entity> cachedEntities = new ArrayList<>();
+        for (Entity ent : mc.world.getEntities()) cachedEntities.add(ent);
 
-        for (Entity ent : mc.world.getEntities()) {
+        // Флаг: летит ли уже снаряд, БРОШЕННЫЙ САМИМ ИГРОКОМ.
+        // Если да — не рисуем предсказание из руки, чтобы не было двух полосок.
+        boolean hasOwnFlying = false;
+
+        for (Entity ent : cachedEntities) {
             if (ent instanceof EnderPearlEntity pearl && showPearl.getValue()) {
-                boolean isPlayerThrown = pearl.getOwner() != null && pearl.getOwner() == mc.player;
-                hasPlayerProjectiles |= isPlayerThrown;
-                simulatePearl(pearl, isPlayerThrown);
-                // track last throw time removed; no cooldown UI currently
-            } else if (ent instanceof ArrowEntity arrow && (arrow.getOwner() != null) && (showBow.getValue() || showCrossbow.getValue())) {
-                boolean isMoving = !arrow.isOnGround() && !arrow.isTouchingWater() && arrow.getVelocity().lengthSquared() >= 0.01;
-                if (isMoving) {
-                    hasPlayerProjectiles = true;
-                    simulateArrow(arrow);
+                boolean own = pearl.getOwner() == mc.player;
+                if (own) hasOwnFlying = true;
+                simulateGeneric(pearl.getPos(), pearl.getVelocity(), pearl.isTouchingWater(),
+                        ProjectileType.PEARL, own, pearl.getId(), cachedEntities);
+
+            } else if (ent instanceof ArrowEntity arrow && arrow.getOwner() != null
+                    && (showBow.getValue() || showCrossbow.getValue())) {
+                boolean moving = !arrow.isOnGround() && arrow.getVelocity().lengthSquared() >= 0.01;
+                if (moving) {
+                    boolean own = arrow.getOwner() == mc.player;
+                    if (own) hasOwnFlying = true;
+                    simulateGeneric(arrow.getPos(), arrow.getVelocity(), arrow.isTouchingWater(),
+                            ProjectileType.ARROW, own, arrow.getId(), cachedEntities);
                 }
-            } else if (ent instanceof TridentEntity trident && trident.getOwner() != null && showTrident.getValue()) {
-                boolean isMoving = !trident.isOnGround() && !trident.isTouchingWater() && trident.getVelocity().lengthSquared() >= 0.01;
-                if (isMoving) {
-                    hasPlayerProjectiles = true;
-                    simulateTrident(trident);
+
+            } else if (ent instanceof TridentEntity trident && trident.getOwner() != null
+                    && showTrident.getValue()) {
+                boolean moving = !trident.isOnGround() && trident.getVelocity().lengthSquared() >= 0.01;
+                if (moving) {
+                    boolean own = trident.getOwner() == mc.player;
+                    if (own) hasOwnFlying = true;
+                    simulateGeneric(trident.getPos(), trident.getVelocity(), trident.isTouchingWater(),
+                            ProjectileType.TRIDENT, own, trident.getId(), cachedEntities);
                 }
+
+            } else if (ent instanceof PotionEntity potion && showPotion.getValue()) {
+                boolean own = potion.getOwner() == mc.player;
+                if (own) hasOwnFlying = true;
+                simulateGeneric(potion.getPos(), potion.getVelocity(), potion.isTouchingWater(),
+                        ProjectileType.POTION, own, potion.getId(), cachedEntities);
             }
         }
 
-        // Simulate from hand if requested and nothing is flying
-        boolean holdingPearl = isHoldingEnderPearl();
-        boolean holdingBow = isHoldingBow();
-        boolean holdingCrossbow = isHoldingCrossbow();
-        boolean holdingTrident = isHoldingTrident();
-        boolean isBowDrawn = mc.player != null && mc.player.isUsingItem() && mc.player.getActiveItem().getItem() == Items.BOW;
-        boolean isCrossbowCharged = mc.player != null && holdingCrossbow && CrossbowItem.isCharged(mc.player.getMainHandStack()) || CrossbowItem.isCharged(mc.player.getOffHandStack());
-        boolean isTridentCharging = mc.player != null && mc.player.isUsingItem() && mc.player.getActiveItem().getItem() == Items.TRIDENT;
+        // ──────────────────────────────────────────────────────────────
+        // Предсказание из руки — только когда собственный снаряд НЕ летит.
+        // ──────────────────────────────────────────────────────────────
+        if (!hasOwnFlying && showWhenHolding.getValue()) {
+            boolean holdingPearl    = isHoldingItem(Items.ENDER_PEARL);
+            boolean holdingBow      = isHoldingItem(Items.BOW);
+            boolean holdingCrossbow = isHoldingItem(Items.CROSSBOW);
+            boolean holdingTrident  = isHoldingItem(Items.TRIDENT);
+            boolean holdingPotion   = isHoldingItem(Items.SPLASH_POTION)
+                    || isHoldingItem(Items.LINGERING_POTION);
 
-        boolean shouldShowHolding = showWhenHolding.getValue() && (holdingPearl || (holdingBow && isBowDrawn) || (holdingCrossbow && isCrossbowCharged) || (holdingTrident && isTridentCharging));
+            boolean isBowDrawn      = mc.player.isUsingItem()
+                    && mc.player.getActiveItem().getItem() == Items.BOW;
+            boolean isCrossbowLoaded = holdingCrossbow
+                    && (CrossbowItem.isCharged(mc.player.getMainHandStack())
+                    || CrossbowItem.isCharged(mc.player.getOffHandStack()));
+            boolean isTridentWinding = mc.player.isUsingItem()
+                    && mc.player.getActiveItem().getItem() == Items.TRIDENT;
 
-        if (shouldShowHolding && !hasPlayerProjectiles) {
-            if (holdingPearl && showPearl.getValue()) simulatePearlFromHand();
-            if (holdingBow && showBow.getValue() && isBowDrawn) simulateBowFromHand();
-            if (holdingCrossbow && showCrossbow.getValue() && isCrossbowCharged) simulateCrossbowFromHand();
-            if (holdingTrident && showTrident.getValue() && isTridentCharging) simulateTridentFromHand();
+            if (holdingPearl    && showPearl.getValue())
+                simulateFromHand(ProjectileType.PEARL,   PEARL_SPEED,   -1, cachedEntities);
+            if (holdingBow      && showBow.getValue()      && isBowDrawn)
+                simulateFromHand(ProjectileType.ARROW,   ARROW_SPEED,   -2, cachedEntities);
+            if (holdingCrossbow && showCrossbow.getValue() && isCrossbowLoaded)
+                simulateFromHand(ProjectileType.ARROW,   ARROW_SPEED,   -3, cachedEntities);
+            if (holdingTrident  && showTrident.getValue()  && isTridentWinding)
+                simulateFromHand(ProjectileType.TRIDENT, TRIDENT_SPEED, -4, cachedEntities);
+            if (holdingPotion   && showPotion.getValue())
+                simulateFromHand(ProjectileType.POTION,  POTION_SPEED,  -5, cachedEntities);
         }
 
         if (!projectilePoints.isEmpty()) {
-            renderProjectileTrajectory3D(e, hasPlayerProjectiles);
+            renderProjectileTrajectory3D(e);
         }
 
         if (highlightPlayers.getValue()) {
-            for (ProjectilePoint point : projectilePoints) {
-                if (point.isLandingPoint() && point.isPlayerThrown()) {
-                    for (Entity entity : mc.world.getEntities()) {
-                        if (entity instanceof LivingEntity living &&
-                                living != mc.player &&
-                                living.isAlive() &&
-                                living.getBoundingBox().expand(0.3).contains(point.pos())) {
-                            double distance = mc.player.getPos().distanceTo(living.getPos());
-                            if (distance <= highlightRange) {
-                                renderPlayerHighlight(e, living);
-                            }
-                        }
-                    }
+            for (ProjectilePoint pt : projectilePoints) {
+                if (pt.isLandingPoint() && pt.isPlayerThrown() && pt.hitEntity() instanceof LivingEntity living
+                        && living != mc.player && living.isAlive()) {
+                    double dist = mc.player.getPos().distanceTo(living.getPos());
+                    if (dist <= highlightRange) renderPlayerHighlight(e, living);
                 }
             }
         }
     }
 
-    private boolean isHoldingEnderPearl() {
+    // ──────────────────────────────────────────────────────────────────────
+    // Хелперы
+    // ──────────────────────────────────────────────────────────────────────
+
+    private boolean isHoldingItem(net.minecraft.item.Item item) {
         if (mc.player == null) return false;
-        return mc.player.getMainHandStack().getItem() == Items.ENDER_PEARL
-                || mc.player.getOffHandStack().getItem() == Items.ENDER_PEARL;
+        return mc.player.getMainHandStack().getItem() == item
+                || mc.player.getOffHandStack().getItem() == item;
     }
 
-    private boolean isHoldingBow() {
-        if (mc.player == null) return false;
-        return mc.player.getMainHandStack().getItem() == Items.BOW
-                || mc.player.getOffHandStack().getItem() == Items.BOW;
-    }
-
-    private boolean isHoldingCrossbow() {
-        if (mc.player == null) return false;
-        return mc.player.getMainHandStack().getItem() == Items.CROSSBOW
-                || mc.player.getOffHandStack().getItem() == Items.CROSSBOW;
-    }
-
-    private boolean isHoldingTrident() {
-        if (mc.player == null) return false;
-        return mc.player.getMainHandStack().getItem() == Items.TRIDENT
-                || mc.player.getOffHandStack().getItem() == Items.TRIDENT;
-    }
-
-    private void simulatePearlFromHand() {
-        if (mc.player == null) return;
-
-        Vec3d startPos = mc.player.getEyePos();
+    /**
+     * Стартовая точка для предсказания из руки.
+     * Сдвинута на 0.6 блока вперёд по взгляду — линия не влетает в лицо.
+     */
+    private Vec3d getThrowStartPos() {
+        float yaw   = mc.player.getYaw();
         float pitch = mc.player.getPitch();
-        float yaw = mc.player.getYaw();
-
-        Vec3d initialVelocity = new Vec3d(
+        Vec3d dir = new Vec3d(
                 -Math.sin(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch)),
                 -Math.sin(Math.toRadians(pitch)),
                 Math.cos(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch))
-        ).multiply(PEARL_SPEED);
-
-        simulateProjectileLanding(startPos, initialVelocity, ProjectileType.PEARL, false, true);
+        );
+        return mc.player.getEyePos().add(dir.multiply(0.6));
     }
 
-    private void simulateBowFromHand() {
-        if (mc.player == null) return;
-
-        Vec3d startPos = mc.player.getEyePos();
+    private Vec3d getThrowVelocity(double speed) {
+        float yaw   = mc.player.getYaw();
         float pitch = mc.player.getPitch();
-        float yaw = mc.player.getYaw();
-
-        Vec3d initialVelocity = new Vec3d(
+        return new Vec3d(
                 -Math.sin(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch)),
                 -Math.sin(Math.toRadians(pitch)),
                 Math.cos(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch))
-        ).multiply(ARROW_SPEED);
-
-        simulateProjectileLanding(startPos, initialVelocity, ProjectileType.ARROW, false, true);
+        ).multiply(speed);
     }
 
-    private void simulateCrossbowFromHand() {
-        if (mc.player == null) return;
-
-        Vec3d startPos = mc.player.getEyePos();
-        float pitch = mc.player.getPitch();
-        float yaw = mc.player.getYaw();
-
-        Vec3d initialVelocity = new Vec3d(
-                -Math.sin(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch)),
-                -Math.sin(Math.toRadians(pitch)),
-                Math.cos(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch))
-        ).multiply(ARROW_SPEED);
-
-        simulateProjectileLanding(startPos, initialVelocity, ProjectileType.ARROW, false, true);
+    private double gravityFor(ProjectileType type) {
+        return switch (type) {
+            case PEARL   -> PEARL_GRAVITY;
+            case ARROW   -> ARROW_GRAVITY;
+            case TRIDENT -> TRIDENT_GRAVITY;
+            case POTION  -> POTION_GRAVITY;
+        };
     }
 
-    private void simulateTridentFromHand() {
-        if (mc.player == null) return;
-
-        Vec3d startPos = mc.player.getEyePos();
-        float pitch = mc.player.getPitch();
-        float yaw = mc.player.getYaw();
-
-        Vec3d initialVelocity = new Vec3d(
-                -Math.sin(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch)),
-                -Math.sin(Math.toRadians(pitch)),
-                Math.cos(Math.toRadians(yaw)) * Math.cos(Math.toRadians(pitch))
-        ).multiply(TRIDENT_SPEED);
-
-        simulateProjectileLanding(startPos, initialVelocity, ProjectileType.TRIDENT, false, true);
-    }
-
-    private void simulatePearl(EnderPearlEntity pearl, boolean isPlayerThrown) {
-        Vec3d pos = pearl.getPos();
-        Vec3d vel = pearl.getVelocity();
-        boolean inWater = pearl.isTouchingWater();
-
-        int ticks = 0;
-        outer: for (int t = 0; t < MAX_TICKS; t++) {
-            for (int s = 0; s < SUBSTEPS; s++) {
-                Vec3d prev = pos;
-                inWater = isInWater(pos) || inWater;
-
-                double dragPerSub = Math.pow(inWater ? WATER_DRAG : AIR_DRAG, 1.0 / SUBSTEPS);
-                Vec3d step = vel.multiply(PEARL_SPEED_FACTOR / SUBSTEPS);
-                pos = pos.add(step);
-
-                Entity hitEntity = null;
-                if (isPlayerThrown) {
-                    for (Entity entity : mc.world.getEntities()) {
-                        if (entity != pearl && entity != mc.player && entity.getBoundingBox().expand(0.3).contains(pos)) {
-                            hitEntity = entity;
-                            projectilePoints.add(new ProjectilePoint(pos, ticks, true, System.nanoTime(), ProjectileType.PEARL, true, hitEntity, isPlayerThrown));
-                            break outer;
-                        }
-                    }
-                }
-
-                projectilePoints.add(new ProjectilePoint(pos, ticks, false, System.nanoTime(), ProjectileType.PEARL, true, null, isPlayerThrown));
-
-                RaycastContext ctx = new RaycastContext(prev, pos, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.ANY, pearl);
-                HitResult hit = mc.world.raycast(ctx);
-                if (hit.getType() == HitResult.Type.BLOCK) {
-                    BlockHitResult bhr = (BlockHitResult) hit;
-                    projectilePoints.add(new ProjectilePoint(bhr.getPos(), ticks, true, System.nanoTime(), ProjectileType.PEARL, true, null, isPlayerThrown));
-                    break outer;
-                }
-
-                if (pos.y < -128) {
-                    projectilePoints.add(new ProjectilePoint(pos, ticks, true, System.nanoTime(), ProjectileType.PEARL, true, null, isPlayerThrown));
-                    break outer;
-                }
-
-                double gravityMultiplier = inWater ? 0.2 : 1.0;
-                vel = vel.subtract(0, (PEARL_GRAVITY * PEARL_SPEED_FACTOR * gravityMultiplier) / SUBSTEPS, 0).multiply(dragPerSub);
-            }
-            ticks++;
-        }
-    }
-
-    private void simulateArrow(ArrowEntity arrow) {
-        Vec3d pos = arrow.getPos();
-        Vec3d vel = arrow.getVelocity();
-        boolean inWater = arrow.isTouchingWater();
-
-        int ticks = 0;
-        outer: for (int t = 0; t < MAX_TICKS; t++) {
-            for (int s = 0; s < SUBSTEPS; s++) {
-                Vec3d prev = pos;
-                inWater = isInWater(pos) || inWater;
-
-                double dragPerSub = Math.pow(inWater ? WATER_DRAG : AIR_DRAG, 1.0 / SUBSTEPS);
-                Vec3d step = vel.multiply(1.0 / SUBSTEPS);
-                pos = pos.add(step);
-
-                Entity hitEntity = null;
-                for (Entity entity : mc.world.getEntities()) {
-                    if (entity != arrow && entity != mc.player && entity.getBoundingBox().expand(0.3).contains(pos)) {
-                        hitEntity = entity;
-                        projectilePoints.add(new ProjectilePoint(pos, ticks, true, System.nanoTime(), ProjectileType.ARROW, true, hitEntity, true));
-                        break outer;
-                    }
-                }
-
-                projectilePoints.add(new ProjectilePoint(pos, ticks, false, System.nanoTime(), ProjectileType.ARROW, true, null, true));
-
-                RaycastContext ctx = new RaycastContext(prev, pos, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.ANY, arrow);
-                HitResult hit = mc.world.raycast(ctx);
-                if (hit.getType() == HitResult.Type.BLOCK) {
-                    BlockHitResult bhr = (BlockHitResult) hit;
-                    projectilePoints.add(new ProjectilePoint(bhr.getPos(), ticks, true, System.nanoTime(), ProjectileType.ARROW, true, null, true));
-                    break outer;
-                }
-
-                if (pos.y < -128) {
-                    projectilePoints.add(new ProjectilePoint(pos, ticks, true, System.nanoTime(), ProjectileType.ARROW, true, null, true));
-                    break outer;
-                }
-
-                double gravityMultiplier = inWater ? 0.2 : 1.0;
-                vel = vel.subtract(0, (ARROW_GRAVITY * gravityMultiplier) / SUBSTEPS, 0).multiply(dragPerSub);
-            }
-            ticks++;
-        }
-    }
-
-    private void simulateTrident(TridentEntity trident) {
-        Vec3d pos = trident.getPos();
-        Vec3d vel = trident.getVelocity();
-        boolean inWater = trident.isTouchingWater();
-
-        int ticks = 0;
-        outer: for (int t = 0; t < MAX_TICKS; t++) {
-            for (int s = 0; s < SUBSTEPS; s++) {
-                Vec3d prev = pos;
-                inWater = isInWater(pos) || inWater;
-
-                double dragPerSub = Math.pow(inWater ? WATER_DRAG : AIR_DRAG, 1.0 / SUBSTEPS);
-                Vec3d step = vel.multiply(1.0 / SUBSTEPS);
-                pos = pos.add(step);
-
-                Entity hitEntity = null;
-                for (Entity entity : mc.world.getEntities()) {
-                    if (entity != trident && entity != mc.player && entity.getBoundingBox().expand(0.3).contains(pos)) {
-                        hitEntity = entity;
-                        projectilePoints.add(new ProjectilePoint(pos, ticks, true, System.nanoTime(), ProjectileType.TRIDENT, true, hitEntity, true));
-                        break outer;
-                    }
-                }
-
-                projectilePoints.add(new ProjectilePoint(pos, ticks, false, System.nanoTime(), ProjectileType.TRIDENT, true, null, true));
-
-                RaycastContext ctx = new RaycastContext(prev, pos, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.ANY, trident);
-                HitResult hit = mc.world.raycast(ctx);
-                if (hit.getType() == HitResult.Type.BLOCK) {
-                    BlockHitResult bhr = (BlockHitResult) hit;
-                    projectilePoints.add(new ProjectilePoint(bhr.getPos(), ticks, true, System.nanoTime(), ProjectileType.TRIDENT, true, null, true));
-                    break outer;
-                }
-
-                if (pos.y < -128) {
-                    projectilePoints.add(new ProjectilePoint(pos, ticks, true, System.nanoTime(), ProjectileType.TRIDENT, true, null, true));
-                    break outer;
-                }
-
-                double gravityMultiplier = inWater ? 0.2 : 1.0;
-                vel = vel.subtract(0, (TRIDENT_GRAVITY * gravityMultiplier) / SUBSTEPS, 0).multiply(dragPerSub);
-            }
-            ticks++;
-        }
-    }
-
-    private void simulateProjectileLanding(Vec3d startPos, Vec3d initialVelocity, ProjectileType type, boolean isMoving, boolean isPlayerThrown) {
-        Vec3d pos = startPos;
-        Vec3d vel = initialVelocity;
-
-        int ticks = 0;
-        boolean inWater = false;
-
-        outer: for (int t = 0; t < MAX_TICKS; t++) {
-            for (int s = 0; s < SUBSTEPS; s++) {
-                Vec3d prev = pos;
-                inWater = isInWater(pos) || inWater;
-
-                double dragPerSub = Math.pow(inWater ? WATER_DRAG : AIR_DRAG, 1.0 / SUBSTEPS);
-                double speedFactor = type == ProjectileType.PEARL ? PEARL_SPEED_FACTOR : 1.0;
-                Vec3d step = vel.multiply(speedFactor / SUBSTEPS);
-                pos = pos.add(step);
-
-                Entity hitEntity = null;
-                if (isPlayerThrown) {
-                    for (Entity entity : mc.world.getEntities()) {
-                        if (entity != mc.player && entity.getBoundingBox().expand(0.3).contains(pos)) {
-                            hitEntity = entity;
-                            projectilePoints.add(new ProjectilePoint(pos, ticks, true, System.nanoTime(), type, isMoving, hitEntity, isPlayerThrown));
-                            break outer;
-                        }
-                    }
-                }
-
-                projectilePoints.add(new ProjectilePoint(pos, ticks, false, System.nanoTime(), type, isMoving, null, isPlayerThrown));
-
-                RaycastContext ctx = new RaycastContext(prev, pos, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.ANY, mc.player);
-                HitResult hit = mc.world.raycast(ctx);
-                if (hit.getType() == HitResult.Type.BLOCK) {
-                    BlockHitResult bhr = (BlockHitResult) hit;
-                    projectilePoints.add(new ProjectilePoint(bhr.getPos(), ticks, true, System.nanoTime(), type, isMoving, null, isPlayerThrown));
-                    break outer;
-                }
-
-                if (pos.y < -128) {
-                    projectilePoints.add(new ProjectilePoint(pos, ticks, true, System.nanoTime(), type, isMoving, null, isPlayerThrown));
-                    break outer;
-                }
-
-                double gravity;
-                switch (type) {
-                    case PEARL:
-                        gravity = PEARL_GRAVITY;
-                        break;
-                    case ARROW:
-                        gravity = ARROW_GRAVITY;
-                        break;
-                    case TRIDENT:
-                        gravity = TRIDENT_GRAVITY;
-                        break;
-                    default:
-                        gravity = 0.03;
-                }
-
-                double gravityMultiplier = inWater ? 0.2 : 1.0;
-                vel = vel.subtract(0, (gravity * speedFactor * gravityMultiplier) / SUBSTEPS, 0).multiply(dragPerSub);
-            }
-            ticks++;
-        }
-    }
-
+    /** Ловим и стоячую, и текущую воду */
     private boolean isInWater(Vec3d pos) {
-        BlockPos blockPos = BlockPos.ofFloored(pos);
-        return mc.world.getBlockState(blockPos).getFluidState().isStill();
+        var fluid = mc.world.getBlockState(BlockPos.ofFloored(pos)).getFluidState();
+        return !fluid.isEmpty();
     }
 
-    private void renderProjectileTrajectory3D(EventRender3D.Game e, boolean hasFlyingProjectiles) {
-        // Group previous and current points into trajectories for interpolation
-        List<List<ProjectilePoint>> trajectories = groupTrajectories(projectilePoints);
+    // ──────────────────────────────────────────────────────────────────────
+    // Симуляция
+    // ──────────────────────────────────────────────────────────────────────
+
+    private void simulateFromHand(ProjectileType type, double speed, int entityId, List<Entity> entities) {
+        simulateGeneric(getThrowStartPos(), getThrowVelocity(speed), false,
+                type, true, entityId, entities);
+    }
+
+    /**
+     * Единый метод симуляции для всех типов снарядов.
+     * entities — кэшированный список, НЕ вызываем mc.world.getEntities() внутри.
+     */
+    private void simulateGeneric(Vec3d pos, Vec3d vel, boolean startInWater,
+                                 ProjectileType type, boolean isPlayerThrown,
+                                 int entityId, List<Entity> entities) {
+        boolean inWater    = startInWater;
+        double  speedFactor = type == ProjectileType.PEARL ? PEARL_SPEED_FACTOR : 1.0;
+        double  gravity     = gravityFor(type);
+
+        // Время фиксируется ОДИН РАЗ — от него отсчитываем elapsed в renderLandingInfo2D
+        long simStartTime = System.nanoTime();
+
+        int ticks = 0;
+        outer:
+        for (int t = 0; t < MAX_TICKS; t++) {
+            for (int s = 0; s < SUBSTEPS; s++) {
+                Vec3d prev = pos;
+                inWater = isInWater(pos) || inWater;
+
+                double drag = Math.pow(inWater ? WATER_DRAG : AIR_DRAG, 1.0 / SUBSTEPS);
+                pos = pos.add(vel.multiply(speedFactor / SUBSTEPS));
+
+                // Коллизия с блоком
+                RaycastContext ctx = new RaycastContext(prev, pos,
+                        RaycastContext.ShapeType.COLLIDER,
+                        RaycastContext.FluidHandling.NONE, mc.player);
+                HitResult hit = mc.world.raycast(ctx);
+                if (hit.getType() == HitResult.Type.BLOCK) {
+                    BlockHitResult bhr = (BlockHitResult) hit;
+                    projectilePoints.add(new ProjectilePoint(
+                            bhr.getPos(), ticks, true, simStartTime,
+                            type, true, null, isPlayerThrown, entityId));
+                    break outer;
+                }
+
+                // За пределы мира
+                if (pos.y < mc.world.getBottomY()) {
+                    projectilePoints.add(new ProjectilePoint(
+                            pos, ticks, true, simStartTime,
+                            type, true, null, isPlayerThrown, entityId));
+                    break outer;
+                }
+
+                // Коллизия с сущностью (только для снарядов игрока — чужие не проверяем)
+                Entity hitEntity = null;
+                if (isPlayerThrown) {
+                    for (Entity entity : entities) {
+                        if (entity == mc.player) continue;
+                        if (entity.getBoundingBox().expand(0.3).contains(pos)) {
+                            hitEntity = entity;
+                            break;
+                        }
+                    }
+                }
+
+                projectilePoints.add(new ProjectilePoint(
+                        pos, ticks, hitEntity != null, simStartTime,
+                        type, true, hitEntity, isPlayerThrown, entityId));
+
+                if (hitEntity != null) break outer;
+
+                double gravMult = inWater ? 0.2 : 1.0;
+                vel = vel.subtract(0, (gravity * speedFactor * gravMult) / SUBSTEPS, 0)
+                        .multiply(drag);
+            }
+            ticks++;
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Рендер
+    // ──────────────────────────────────────────────────────────────────────
+
+    private void renderProjectileTrajectory3D(EventRender3D.Game e) {
+        List<List<ProjectilePoint>> trajectories     = groupTrajectories(projectilePoints);
         List<List<ProjectilePoint>> prevTrajectories = groupTrajectories(prevProjectilePoints);
         float tickDelta = e.getTickDelta();
 
-        // Draw in world space via Render3D batching
         Render3D.prepare();
         Render3D.DEBUG_LINE_WIDTH = BASE_LINE_WIDTH;
 
         for (int g = 0; g < trajectories.size(); g++) {
-            List<ProjectilePoint> trajectory = trajectories.get(g);
-            List<ProjectilePoint> prevTrajectory = g < prevTrajectories.size() ? prevTrajectories.get(g) : null;
-            if (trajectory.size() < 2) continue;
+            List<ProjectilePoint> traj     = trajectories.get(g);
+            List<ProjectilePoint> prevTraj = g < prevTrajectories.size() ? prevTrajectories.get(g) : null;
+            if (traj.size() < 2) continue;
 
-            Vec3d prevPos = interpolatePoint(prevTrajectory, trajectory, 0, tickDelta);
-            for (int i = 1; i < trajectory.size(); i++) {
-                Vec3d currPos = interpolatePoint(prevTrajectory, trajectory, i, tickDelta);
+            Vec3d prevPos = interpolatePoint(prevTraj, traj, 0, tickDelta);
 
-                // Theme color with smooth alpha fade towards the tail and gradient
-                float t = (float) i / (float) trajectory.size();
-                
-                // Создаем градиент между основным и вторичным цветом
-                int r = (int) (currentColor.getRed() * (1.0f - t) + currentColorSecondary.getRed() * t);
-                int gg = (int) (currentColor.getGreen() * (1.0f - t) + currentColorSecondary.getGreen() * t);
-                int b = (int) (currentColor.getBlue() * (1.0f - t) + currentColorSecondary.getBlue() * t);
-                int a = (int) (255.0f * (1.0f - t)); // head opaque -> tail transparent
-                a = Math.max(24, Math.min(255, a));
-                int argb = new Color(r, gg, b, a).getRGB();
+            for (int i = 1; i < traj.size(); i++) {
+                Vec3d currPos = interpolatePoint(prevTraj, traj, i, tickDelta);
+                float t = (float) i / (float) traj.size();
 
-                Render3D.drawLine(prevPos, currPos, argb, BASE_LINE_WIDTH);
+                int r  = clamp((int)(currentColor.getRed()   * (1f - t) + currentColorSecondary.getRed()   * t));
+                int gg = clamp((int)(currentColor.getGreen() * (1f - t) + currentColorSecondary.getGreen() * t));
+                int b  = clamp((int)(currentColor.getBlue()  * (1f - t) + currentColorSecondary.getBlue()  * t));
+                // Минимальная альфа 120 — траектория хорошо видна даже на хвосте
+                int a  = Math.max(120, (int)(255f * (1f - t)));
 
-                // Draw hit entity box for player-thrown projectiles at landing with gradient
-                if (trajectory.get(i).isPlayerThrown() && trajectory.get(i).hitEntity() != null && trajectory.get(i).isLandingPoint()) {
-                    Entity hitEntity = trajectory.get(i).hitEntity();
-                    if (hitEntity instanceof LivingEntity living && living.isAlive()) {
-                        Box box = living.getBoundingBox().expand(0.1);
-                        Color fillColor = new Color(r, gg, b, 80);
-                        Color outlineColor = new Color(r, gg, b, 255);
-                        Render3D.renderBox(e.getMatrices(), box, fillColor);
-                        Render3D.renderBoxOutline(e.getMatrices(), box, outlineColor);
-                    }
+                Render3D.drawLine(prevPos, currPos, new Color(r, gg, b, a).getRGB(), BASE_LINE_WIDTH);
+
+                // Хайлайт сущности при попадании
+                ProjectilePoint pt = traj.get(i);
+                if (pt.isPlayerThrown() && pt.hitEntity() instanceof LivingEntity living
+                        && living.isAlive() && pt.isLandingPoint()) {
+                    Box box = living.getBoundingBox().expand(0.1);
+                    Render3D.renderBox(e.getMatrices(), box, new Color(r, gg, b, 80));
+                    Render3D.renderBoxOutline(e.getMatrices(), box, new Color(r, gg, b, 255));
                 }
 
                 prevPos = currPos;
+            }
+
+            // Крестик в точке приземления на земле
+            ProjectilePoint last = traj.get(traj.size() - 1);
+            if (last.isLandingPoint() && last.hitEntity() == null) {
+                int argb = new Color(
+                        currentColor.getRed(), currentColor.getGreen(),
+                        currentColor.getBlue(), 220).getRGB();
+                float thick = BASE_LINE_WIDTH * 1.6f;
+                Render3D.drawLine(last.pos().add(-0.35, 0.02, 0),
+                        last.pos().add( 0.35, 0.02, 0), argb, thick);
+                Render3D.drawLine(last.pos().add(0, 0.02, -0.35),
+                        last.pos().add(0, 0.02,  0.35), argb, thick);
             }
         }
 
         Render3D.render();
     }
 
+    /**
+     * Группировка по (type, entityId).
+     * entityId уникален для каждого летящего снаряда, поэтому
+     * два перла одновременно в воздухе → две отдельные траектории.
+     */
     private List<List<ProjectilePoint>> groupTrajectories(List<ProjectilePoint> points) {
-        List<List<ProjectilePoint>> out = new ArrayList<>();
-        List<ProjectilePoint> currentTrajectory = null;
+        List<List<ProjectilePoint>> out     = new ArrayList<>();
+        List<ProjectilePoint>       current = null;
         ProjectileType lastType = null;
-        boolean lastPlayerThrown = false;
-        for (ProjectilePoint point : points) {
-            if (lastType != point.type() || lastPlayerThrown != point.isPlayerThrown() || currentTrajectory == null) {
-                if (currentTrajectory != null && !currentTrajectory.isEmpty()) out.add(currentTrajectory);
-                currentTrajectory = new ArrayList<>();
-                lastType = point.type();
-                lastPlayerThrown = point.isPlayerThrown();
+        int            lastId   = Integer.MIN_VALUE;
+
+        for (ProjectilePoint pt : points) {
+            if (current == null || lastType != pt.type() || lastId != pt.entityId()) {
+                if (current != null && !current.isEmpty()) out.add(current);
+                current  = new ArrayList<>();
+                lastType = pt.type();
+                lastId   = pt.entityId();
             }
-            currentTrajectory.add(point);
+            current.add(pt);
         }
-        if (currentTrajectory != null && !currentTrajectory.isEmpty()) out.add(currentTrajectory);
+        if (current != null && !current.isEmpty()) out.add(current);
         return out;
     }
 
-    private Vec3d interpolatePoint(List<ProjectilePoint> prev, List<ProjectilePoint> curr, int index, float t) {
+    private Vec3d interpolatePoint(List<ProjectilePoint> prev, List<ProjectilePoint> curr,
+                                   int index, float t) {
         Vec3d c = curr.get(index).pos();
         if (prev == null || prev.isEmpty()) return c;
-        int prevIndex = Math.min(index, prev.size() - 1);
-        Vec3d p = prev.get(prevIndex).pos();
-        // Ease-out for smoother perceived motion within tick
-        float tt = 1.0f - (float) Math.pow(1.0f - Math.min(Math.max(t, 0.0f), 1.0f), 3.0);
-        double x = p.x + (c.x - p.x) * tt;
-        double y = p.y + (c.y - p.y) * tt;
-        double z = p.z + (c.z - p.z) * tt;
-        return new Vec3d(x, y, z);
+        Vec3d p  = prev.get(Math.min(index, prev.size() - 1)).pos();
+        float tt = 1f - (float) Math.pow(1f - Math.min(Math.max(t, 0f), 1f), 3.0);
+        return new Vec3d(
+                p.x + (c.x - p.x) * tt,
+                p.y + (c.y - p.y) * tt,
+                p.z + (c.z - p.z) * tt);
     }
 
     private void renderLandingInfo2D(EventRender2D e) {
         MatrixStack ms = e.getContext().getMatrices();
+        long nowNano = System.nanoTime();
         for (ProjectilePoint pp : projectilePoints) {
-            if (pp.isLandingPoint()) {
-                Vec3d pos = pp.pos;
-                Vec3d lp = WorldUtils.getPosition(pos);
-                if (lp.z > 0 && lp.z < 1) {
-                    double timeSec = pp.ticks / 20.0;
-                    String timeText = String.format("%.1f s", timeSec);
+            if (!pp.isLandingPoint()) continue;
+            Vec3d lp = WorldUtils.getPosition(pp.pos);
+            if (lp.z <= 0 || lp.z >= 1) continue;
 
-                    int boxX = (int) lp.x - 20;
-                    int boxY = (int) lp.y + 4;
-                    int boxW = 40;
-                    int boxH = 15;
-                    int cornerRadius = 3;
-                    float fontSize = 7.5f;
+            // pp.ticks — симуляционные тики от текущей позиции снаряда до земли.
+            // Вычитаем реальное время, прошедшее с момента расчёта точки,
+            // чтобы счётчик плавно убывал между тиками симуляции.
+            double simulatedSec = pp.ticks / 20.0;
+            double elapsedSec   = (nowNano - pp.creationTime()) / 1_000_000_000.0;
+            double remaining    = Math.max(0.0, simulatedSec - elapsedSec);
+            String timeText = String.format("%.1fs", remaining);
+            int boxX = (int) lp.x - 20, boxY = (int) lp.y + 4;
+            int boxW = 40,              boxH  = 15;
+            float fontSize = 7.5f;
 
-                    Render2D.drawRoundedRect(ms, boxX, boxY, boxW, boxH-1, cornerRadius, new Color(0, 0, 0, 150));
+            Render2D.drawRoundedRect(ms, boxX, boxY, boxW, boxH - 1, 3, new Color(0, 0, 0, 160));
 
-                    ms.push();
-                    float scale = 0.6f;
-                    int itemSize = 16;
-                    int scaledItemSize = (int) (itemSize * scale);
-                    int itemX = boxX + (boxW / 2) - (scaledItemSize / 2);
-                    int itemY = boxY + (boxH / 2) - (scaledItemSize / 2);
-                    ms.translate(itemX, itemY, 0);
-                    ms.scale(scale, scale, 1.0f);
+            ms.push();
+            float scale = 0.6f;
+            int half = (int)(8 * scale);
+            ms.translate(boxX + boxW / 2 - half, boxY + boxH / 2 - half, 0);
+            ms.scale(scale, scale, 1f);
 
-                    ItemStack itemStack;
-                    switch (pp.type()) {
-                        case PEARL -> itemStack = new ItemStack(Items.ENDER_PEARL);
-                        case ARROW -> itemStack = new ItemStack(Items.ARROW);
-                        case TRIDENT -> itemStack = new ItemStack(Items.TRIDENT);
-                        default -> itemStack = new ItemStack(Items.ARROW);
-                    }
+            ItemStack itemStack = switch (pp.type()) {
+                case PEARL   -> new ItemStack(Items.ENDER_PEARL);
+                case ARROW   -> new ItemStack(Items.ARROW);
+                case TRIDENT -> new ItemStack(Items.TRIDENT);
+                case POTION  -> new ItemStack(Items.SPLASH_POTION);
+            };
+            e.getContext().drawItem(itemStack, -20, -1);
+            ms.pop();
 
-                    e.getContext().drawItem(itemStack, 0 - 20, 0 - 1);
-                    ms.pop();
-
-                    Render2D.drawFont(
-                            ms,
-                            Fonts.MEDIUM.getFont(fontSize),
-                            timeText,
-                            boxX + 18,
-                            boxY + boxH / 2f - Fonts.MEDIUM.getHeight(fontSize) / 2f,
-                            new Color(255, 255, 255, 255)
-                    );
-                }
-            }
+            Render2D.drawFont(ms, Fonts.MEDIUM.getFont(fontSize), timeText,
+                    boxX + 18, boxY + boxH / 2f - Fonts.MEDIUM.getHeight(fontSize) / 2f,
+                    Color.WHITE);
         }
     }
 
     private void renderPlayerHighlight(EventRender3D.Game e, LivingEntity player) {
         Box box = player.getBoundingBox().expand(0.1);
-        Render3D.renderBox(e.getMatrices(), box, new Color(currentColor.getRed(), currentColor.getGreen(), currentColor.getBlue(), 80));
+        Render3D.renderBox(e.getMatrices(), box,
+                new Color(currentColor.getRed(), currentColor.getGreen(), currentColor.getBlue(), 80));
         Render3D.renderBoxOutline(e.getMatrices(), box, currentColor);
     }
+
+    private static int clamp(int v) { return Math.min(255, Math.max(0, v)); }
 }
