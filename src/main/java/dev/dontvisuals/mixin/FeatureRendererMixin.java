@@ -19,7 +19,9 @@ public abstract class FeatureRendererMixin {
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/RenderLayer;getArmorCutoutNoCull(Lnet/minecraft/util/Identifier;)Lnet/minecraft/client/render/RenderLayer;"))
     private RenderLayer dontvisuals$armorLayer(Identifier texture) {
         HitColor module = dontvisuals.getInstance().getModuleManager().getModule(HitColor.class);
-        if (module != null && module.isToggled() && Boolean.TRUE.equals(HitColorTintState.SHOULD_TINT.get())) {
+        if (module != null && module.isToggled()
+                && Boolean.TRUE.equals(HitColorTintState.SHOULD_TINT.get())
+                && module.mode.getValue() == HitColor.TintMode.FULL) {
             return RenderLayer.getEntityTranslucent(SV_WHITE);
         }
         return RenderLayer.getArmorCutoutNoCull(texture);

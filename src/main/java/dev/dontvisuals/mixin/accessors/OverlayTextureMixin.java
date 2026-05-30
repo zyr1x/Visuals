@@ -30,11 +30,7 @@ public class OverlayTextureMixin implements IOverlayTexture {
                                 .getCurrentTheme().getBackgroundColor();
                         int overlayAlpha = (int) (255 * module.alpha.getValue());
                         image.setColorArgb(u, v, toAbgr(
-                                theme.getRed(),
-                                theme.getGreen(),
-                                theme.getBlue(),
-                                overlayAlpha
-                        ));
+                                theme.getRed(), theme.getGreen(), theme.getBlue(), overlayAlpha));
                     } else {
                         image.setColorArgb(u, v, toAbgr(255, 0, 0, 127));
                     }

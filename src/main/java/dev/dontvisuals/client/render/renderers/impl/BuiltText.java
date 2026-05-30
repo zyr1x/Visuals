@@ -18,26 +18,26 @@ import net.minecraft.client.render.VertexFormat.DrawMode;
 import net.minecraft.client.render.VertexFormats;
 
 public record BuiltText(
-        MsdfFont font,
-        String text,
-    	float size,
-        float thickness,
-        int color,
+		MsdfFont font,
+		String text,
+		float size,
+		float thickness,
+		int color,
 		float smoothness,
-        float spacing,
+		float spacing,
 		int outlineColor,
 		float outlineThickness
-    ) implements IRenderer {
+) implements IRenderer {
 
 	private static final ShaderProgramKey MSDF_FONT_SHADER_KEY = new ShaderProgramKey(ResourceProvider.getShaderIdentifier("msdf_font"), VertexFormats.POSITION_TEXTURE_COLOR, Defines.EMPTY);
-	
+
 	@Override
-    public void render(Matrix4f matrix, float x, float y, float z) {
+	public void render(Matrix4f matrix, float x, float y, float z) {
 		RenderSystem.enableBlend();
 		RenderSystem.defaultBlendFunc();
 		RenderSystem.disableCull();
 		RenderSystem.setShaderTexture(0, this.font.getTextureId());
-		
+
 		boolean outlineEnabled = (this.outlineThickness > 0.0f);
 
 		ShaderProgram shader = RenderSystem.setShader(MSDF_FONT_SHADER_KEY);
@@ -51,10 +51,15 @@ public record BuiltText(
 			float[] outlineComponents = ColorProvider.normalize(this.outlineColor);
 			shader.getUniform("OutlineColor").set(outlineComponents[0], outlineComponents[1], outlineComponents[2], outlineComponents[3]);
 		}
-		
+
 		BufferBuilder builder = Tessellator.getInstance().begin(DrawMode.QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
 		this.font.applyGlyphs(matrix, builder, this.text, this.size, (this.thickness + this.outlineThickness * 0.5f) * 0.5f * this.size, this.spacing, x, y + this.font.getMetrics().baselineHeight() * this.size, z, this.color);
-		BufferRenderer.drawWithGlobalProgram(builder.end());
+
+		var built = builder.endNullable();
+		if (built != null) {
+			BufferRenderer.drawWithGlobalProgram(built);
+		}
+
 		RenderSystem.setShaderTexture(0, 0);
 		RenderSystem.enableCull();
 		RenderSystem.disableBlend();

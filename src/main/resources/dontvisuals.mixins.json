@@ -27,6 +27,7 @@
     "MultiplayerScreenAccessor",
     "MixinServerEntry",
     "ServerEntryAccessor",
+    "EquipmentRendererMixin",
     "BackgroundRendererMixin",
     "BossBarHudMixin",
     "ChatHudNameProtectMixin",
