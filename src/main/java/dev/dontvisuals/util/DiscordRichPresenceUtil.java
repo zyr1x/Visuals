@@ -85,8 +85,9 @@ public class DiscordRichPresenceUtil {
     private static void pushPresence() {
         if (rpc == null) return;
         DiscordRichPresence presence = DiscordRichPresence.builder()
-                .details("DontVisuals")
+                .details("Бесплатные визуалы 1.21.4 \uD83D\uDD25")
                 .state(state != null && !state.isEmpty() ? state : "t.me/dontvisuals")
+                .largeImageKey("large_image") // ← добавь ключ изображения из Developer Portal
                 .largeImageText("DontVisuals")
                 .smallImageText("Playing")
                 .activityType(ActivityType.PLAYING)
