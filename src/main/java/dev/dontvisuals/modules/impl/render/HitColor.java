@@ -16,9 +16,9 @@ public class HitColor extends Module {
 
     public enum TintMode implements Nameable {
         /** Режим 1 — только скин светится, броня остаётся обычной */
-        SKIN_ONLY("Skin Only"),
+        SKIN_ONLY("Скин"),
         /** Режим 2 — всё тело светится, включая броню */
-        FULL("Full");
+        FULL("Полностью");
 
         private final String name;
         TintMode(String name) { this.name = name; }

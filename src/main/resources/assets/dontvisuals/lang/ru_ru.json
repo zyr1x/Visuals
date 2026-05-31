@@ -92,6 +92,7 @@
   "setting.texture": "Текстура",
   "setting.animation": "Анимация",
   "setting.lifeTime": "Время жизни",
+  "setting.lifetime": "Время жизни",
   "setting.mainX": "Main X",
   "setting.mainY": "Main Y",
   "setting.mainZ": "Main Z",
