@@ -134,6 +134,7 @@ public class Render2D implements Wrapper {
                 .size(new SizeState(width, height))
                 .radius(new QuadRadiusState(0))
                 .color(new QuadColorState(color))
+                .smoothness(0f)
                 .build();
         built.render(stack.peek().getPositionMatrix(), x, y);
     }
